@@ -1,0 +1,7 @@
+Release/
+Debug/
+*.user
+*.suo
+*.vcxproj.filters
+.vs/
+nvse
