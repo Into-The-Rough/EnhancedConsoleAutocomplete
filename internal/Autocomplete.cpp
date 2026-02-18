@@ -15,89 +15,53 @@ static const _GetActorValueName GetActorValueName = (_GetActorValueName)0x66EAC0
 static NVSECommandTableInterface* g_CmdTable = nullptr;
 
 
-//seh-safe iteration helpers - vectors must not be in scope inside __try
-static std::vector<const char*> g_TempStrings;
-static std::vector<UInt8> g_TempTypes;
-static int g_TempCount = 0;
-
-static void TempInit(int capacity) {
-	g_TempStrings.resize(capacity);
-	g_TempTypes.resize(capacity);
-	g_TempCount = 0;
-}
-
-static void TempFree() {
-	g_TempStrings.clear();
-	g_TempTypes.clear();
-	g_TempCount = 0;
-}
-
-static void TempAdd(const char* str, UInt8 type = 0) {
-	if (g_TempCount < (int)g_TempStrings.size()) {
-		g_TempStrings[g_TempCount] = str;
-		g_TempTypes[g_TempCount] = type;
-		g_TempCount++;
+static void CollectEditorIDs(UInt8 filterType, std::vector<std::string>& out) {
+	auto* map = *g_EditorIDMap;
+	if (!map) return;
+	for (UInt32 b = 0; b < map->numBuckets; b++) {
+		for (auto* e = map->buckets[b]; e; e = e->next) {
+			if (e->data && e->data->typeID == filterType && e->key && *e->key)
+				out.push_back(e->key);
+		}
 	}
 }
 
-static bool SafeIterateEditorIDMap_ByType(UInt8 filterType) {
+static void CollectAllEditorIDs(bool (*excludeFunc)(UInt8), std::vector<BaseFormEntry>& out) {
 	auto* map = *g_EditorIDMap;
-	if (!map) return false;
-	__try {
-		for (UInt32 b = 0; b < map->numBuckets; b++) {
-			for (auto* e = map->buckets[b]; e; e = e->next) {
-				if (e->data && e->data->typeID == filterType && e->key && *e->key)
-					TempAdd(e->key, filterType);
+	if (!map) return;
+	for (UInt32 b = 0; b < map->numBuckets; b++) {
+		for (auto* e = map->buckets[b]; e; e = e->next) {
+			if (e->data && e->key && *e->key) {
+				UInt8 type = e->data->typeID;
+				if (!excludeFunc || !excludeFunc(type))
+					out.push_back({ e->key, type });
 			}
 		}
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+	}
 }
 
-static bool SafeIterateEditorIDMap_All(bool (*excludeFunc)(UInt8)) {
-	auto* map = *g_EditorIDMap;
-	if (!map) return false;
-	__try {
-		for (UInt32 b = 0; b < map->numBuckets; b++) {
-			for (auto* e = map->buckets[b]; e; e = e->next) {
-				if (e->data && e->key && *e->key) {
-					UInt8 type = e->data->typeID;
-					if (!excludeFunc || !excludeFunc(type))
-						TempAdd(e->key, type);
-				}
-			}
-		}
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
-
-static bool SafeIterateSettingsMap() {
+static void CollectSettings(std::vector<std::string>& out) {
 	auto* coll = *g_GameSettingCollection;
-	if (!coll) return false;
-	__try {
-		auto& map = coll->settingMap;
-		for (UInt32 b = 0; b < map.numBuckets; b++) {
-			for (auto* e = map.buckets[b]; e; e = e->next) {
-				if (e->data && e->data->name && *e->data->name)
-					TempAdd(e->data->name);
-			}
+	if (!coll) return;
+	auto& map = coll->settingMap;
+	for (UInt32 b = 0; b < map.numBuckets; b++) {
+		for (auto* e = map.buckets[b]; e; e = e->next) {
+			if (e->data && e->data->name && *e->data->name)
+				out.push_back(e->data->name);
 		}
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+	}
 }
 
 Setting* LookupGameSetting(const char* name) {
 	auto* coll = *g_GameSettingCollection;
 	if (!coll || !name || !*name) return nullptr;
-	__try {
-		auto& map = coll->settingMap;
-		for (UInt32 b = 0; b < map.numBuckets; b++) {
-			for (auto* e = map.buckets[b]; e; e = e->next) {
-				if (e->data && e->data->name && _stricmp(e->data->name, name) == 0)
-					return e->data;
-			}
+	auto& map = coll->settingMap;
+	for (UInt32 b = 0; b < map.numBuckets; b++) {
+		for (auto* e = map.buckets[b]; e; e = e->next) {
+			if (e->data && e->data->name && _stricmp(e->data->name, name) == 0)
+				return e->data;
 		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) {}
+	}
 	return nullptr;
 }
 
@@ -139,60 +103,48 @@ float GetActorValueForRef(void* ref, UInt32 avCode) {
 	if (!ref) return 0;
 	UInt8 typeID = ((TESForm*)ref)->typeID;
 	if (typeID != kFormType_ACHR && typeID != kFormType_ACRE) return 0;
-	__try {
-		void* avOwner = (void*)((UInt8*)ref + 0xA4);
-		void** vtbl = *(void***)avOwner;
-		if (!vtbl) return 0;
-		typedef float (__thiscall *GetAV_t)(void*, UInt32);
-		auto GetAV = (GetAV_t)vtbl[3];
-		return GetAV(avOwner, avCode);
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return 0;
-	}
+	void* avOwner = (void*)((UInt8*)ref + 0xA4);
+	void** vtbl = *(void***)avOwner;
+	if (!vtbl) return 0;
+	typedef float (__thiscall *GetAV_t)(void*, UInt32);
+	auto GetAV = (GetAV_t)vtbl[3];
+	return GetAV(avOwner, avCode);
 }
 
-static TESForm* SafeLookupFormByEditorID(const char* editorID) {
+static TESForm* LookupByEditorID(const char* editorID) {
 	auto* map = *g_EditorIDMap;
 	if (!map || !editorID) return nullptr;
-	__try {
-		for (UInt32 b = 0; b < map->numBuckets; b++) {
-			for (auto* e = map->buckets[b]; e; e = e->next) {
-				if (e->key && _stricmp(e->key, editorID) == 0)
-					return e->data;
-			}
+	for (UInt32 b = 0; b < map->numBuckets; b++) {
+		for (auto* e = map->buckets[b]; e; e = e->next) {
+			if (e->key && _stricmp(e->key, editorID) == 0)
+				return e->data;
 		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) {}
+	}
 	return nullptr;
 }
 
-static bool SafeBuildRefToEditorIDMap(std::unordered_map<UInt32, const char*>& out) {
+static void BuildRefToEditorIDMap(std::unordered_map<UInt32, const char*>& out) {
 	auto* map = *g_EditorIDMap;
-	if (!map) return false;
-	__try {
-		for (UInt32 b = 0; b < map->numBuckets; b++) {
-			for (auto* e = map->buckets[b]; e; e = e->next) {
-				if (e->data && e->key && *e->key)
-					out[e->data->refID] = e->key;
-			}
+	if (!map) return;
+	for (UInt32 b = 0; b < map->numBuckets; b++) {
+		for (auto* e = map->buckets[b]; e; e = e->next) {
+			if (e->data && e->key && *e->key)
+				out[e->data->refID] = e->key;
 		}
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+	}
 }
 
-static bool SafeIteratePerkList(void* dh, const std::unordered_map<UInt32, const char*>& refMap) {
-	__try {
-		ListNode<void>* node = (ListNode<void>*)((UInt8*)dh + 0x178);
-		while (node) {
-			if (node->data) {
-				TESForm* form = (TESForm*)node->data;
-				auto it = refMap.find(form->refID);
-				if (it != refMap.end())
-					TempAdd(it->second);
-			}
-			node = node->next;
+static void CollectPerks(void* dh, const std::unordered_map<UInt32, const char*>& refMap, std::vector<std::string>& out) {
+	ListNode<void>* node = (ListNode<void>*)((UInt8*)dh + 0x178);
+	while (node) {
+		if (node->data) {
+			TESForm* form = (TESForm*)node->data;
+			auto it = refMap.find(form->refID);
+			if (it != refMap.end())
+				out.push_back(it->second);
 		}
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+		node = node->next;
+	}
 }
 
 void SetCommandTable(NVSECommandTableInterface* table) {
@@ -204,7 +156,7 @@ NVSECommandTableInterface* GetCommandTable() {
 }
 
 TESForm* LookupFormByEditorID(const char* editorID) {
-	return SafeLookupFormByEditorID(editorID);
+	return LookupByEditorID(editorID);
 }
 
 namespace Cells {
@@ -219,12 +171,7 @@ namespace Cells {
 
 		std::vector<std::string> temp;
 		Cache::BuildCellList(temp);
-
-		TempInit(65536);
-		SafeIterateEditorIDMap_ByType(kFormType_Cell);
-		for (int i = 0; i < g_TempCount; i++)
-			temp.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(kFormType_Cell, temp);
 
 		std::sort(temp.begin(), temp.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -245,11 +192,7 @@ namespace GameSettings {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(8192);
-		SafeIterateSettingsMap();
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectSettings(g_List);
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -287,34 +230,27 @@ const CommandInfo* GetCommandInfoByName(const char* name) {
 	if (cmd) return cmd;
 
 	//GetByName doesn't check shortName
-	__try {
-		for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
-			if (c->shortName && _stricmp(c->shortName, name) == 0)
-				return c;
-		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) {}
+	for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
+		if (c->shortName && _stricmp(c->shortName, name) == 0)
+			return c;
+	}
 
 	return nullptr;
 }
 
-static bool SafeReadParamInfo(const CommandInfo* cmd, int index, const char** outTypeStr, bool* outOptional) {
-	__try {
-		if (!cmd->params) return false;
-		ParamInfo* p = &cmd->params[index];
-		if (!p) return false;
+static bool ReadParamInfo(const CommandInfo* cmd, int index, const char** outTypeStr, bool* outOptional) {
+	if (!cmd->params) return false;
+	ParamInfo* p = &cmd->params[index];
 
-		const char* ts = p->typeStr;
-		if (!ts || (uintptr_t)ts < 0x10000 || (uintptr_t)ts > 0x7FFFFFFF) return false;
+	const char* ts = p->typeStr;
+	if (!ts || (uintptr_t)ts < 0x10000 || (uintptr_t)ts > 0x7FFFFFFF) return false;
 
-		char firstChar = *ts;
-		if (firstChar < 0x20 || firstChar > 0x7E) return false;
+	char firstChar = *ts;
+	if (firstChar < 0x20 || firstChar > 0x7E) return false;
 
-		*outTypeStr = ts;
-		*outOptional = p->isOptional != 0;
-		return true;
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return false;
-	}
+	*outTypeStr = ts;
+	*outOptional = p->isOptional != 0;
+	return true;
 }
 
 std::string FormatCommandParams(const CommandInfo* cmd) {
@@ -325,7 +261,7 @@ std::string FormatCommandParams(const CommandInfo* cmd) {
 		const char* typeStr = nullptr;
 		bool isOptional = false;
 
-		if (!SafeReadParamInfo(cmd, i, &typeStr, &isOptional)) continue;
+		if (!ReadParamInfo(cmd, i, &typeStr, &isOptional)) continue;
 
 		if (!typeStr || !*typeStr) typeStr = "?";
 
@@ -348,35 +284,22 @@ namespace CommandNames {
 	std::vector<std::string> g_List;
 	static bool g_Built = false;
 
-	static bool SafeIterateCommandTable() {
-		if (!g_CmdTable) return false;
-		__try {
-			for (auto* cmd = g_CmdTable->Start(); cmd < g_CmdTable->End(); cmd++) {
-				if (cmd->longName && cmd->longName[0]) TempAdd(cmd->longName);
-				if (cmd->shortName && cmd->shortName[0]) TempAdd(cmd->shortName);
-			}
-			return true;
-		} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
-	}
-
 	void Build() {
 		if (g_Built) return;
-
-		TempInit(16384);
-		SafeIterateCommandTable();
+		if (!g_CmdTable) return;
 
 		std::unordered_map<std::string, bool> seen;
-		for (int i = 0; i < g_TempCount; i++) {
-			const char* name = g_TempStrings[i];
-			if (!name || !*name) continue;
-			std::string lower = name;
-			std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-			if (seen.find(lower) == seen.end()) {
-				seen[lower] = true;
-				g_List.push_back(name);
+		for (auto* cmd = g_CmdTable->Start(); cmd < g_CmdTable->End(); cmd++) {
+			for (const char* name : { cmd->longName, cmd->shortName }) {
+				if (!name || !*name) continue;
+				std::string lower = name;
+				std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+				if (seen.find(lower) == seen.end()) {
+					seen[lower] = true;
+					g_List.push_back(name);
+				}
 			}
 		}
-		TempFree();
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -508,12 +431,8 @@ namespace BaseForms {
 		if (g_Built && !force) return;
 		if (force) g_List.clear();
 
-		TempInit(131072);
-		SafeIterateEditorIDMap_All(IsExcludedType);
 		std::vector<BaseFormEntry> temp;
-		for (int i = 0; i < g_TempCount; i++)
-			temp.push_back({ std::string(g_TempStrings[i]), g_TempTypes[i] });
-		TempFree();
+		CollectAllEditorIDs(IsExcludedType, temp);
 
 		std::sort(temp.begin(), temp.end(), [](const BaseFormEntry& a, const BaseFormEntry& b) {
 			return _stricmp(a.editorID.c_str(), b.editorID.c_str()) < 0;
@@ -531,11 +450,7 @@ namespace Quests {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(8192);
-		SafeIterateEditorIDMap_ByType(kFormType_Quest);
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(kFormType_Quest, g_List);
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -552,11 +467,7 @@ namespace Notes {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(4096);
-		SafeIterateEditorIDMap_ByType(49); //kFormType_Note
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(49, g_List); //kFormType_Note
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -573,11 +484,7 @@ namespace Factions {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(2048);
-		SafeIterateEditorIDMap_ByType(8); //kFormType_Faction
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(8, g_List); //kFormType_Faction
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -594,11 +501,7 @@ namespace Sounds {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(8192);
-		SafeIterateEditorIDMap_ByType(13); //kFormType_Sound
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(13, g_List); //kFormType_Sound
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -615,11 +518,7 @@ namespace ImageSpaceModifiers {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(1024);
-		SafeIterateEditorIDMap_ByType(84); //kFormType_ImageSpaceModifier
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(84, g_List); //kFormType_ImageSpaceModifier
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -636,11 +535,7 @@ namespace Weathers {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(512);
-		SafeIterateEditorIDMap_ByType(0x35); //kFormType_TESWeather
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x35, g_List); //kFormType_TESWeather
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -657,11 +552,7 @@ namespace WorldSpaces {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(256);
-		SafeIterateEditorIDMap_ByType(0x41); //kFormType_TESWorldSpace
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x41, g_List); //kFormType_TESWorldSpace
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -678,11 +569,7 @@ namespace Idles {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(2048);
-		SafeIterateEditorIDMap_ByType(0x48); //kFormType_TESIdleForm
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x48, g_List); //kFormType_TESIdleForm
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -699,11 +586,7 @@ namespace MusicTypes {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(256);
-		SafeIterateEditorIDMap_ByType(0x66); //kFormType_BGSMusicType
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x66, g_List); //kFormType_BGSMusicType
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -720,11 +603,7 @@ namespace FormLists {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(4096);
-		SafeIterateEditorIDMap_ByType(0x55); //kFormType_BGSListForm
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x55, g_List); //kFormType_BGSListForm
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -741,11 +620,7 @@ namespace Spells {
 	void Build() {
 		if (g_Built) return;
 
-		TempInit(4096);
-		SafeIterateEditorIDMap_ByType(0x14); //kFormType_SpellItem
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		CollectEditorIDs(0x14, g_List); //kFormType_SpellItem
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -766,13 +641,8 @@ namespace Perks {
 		if (!dh) return;
 
 		std::unordered_map<UInt32, const char*> refToEditorID;
-		SafeBuildRefToEditorIDMap(refToEditorID);
-
-		TempInit(1024);
-		SafeIteratePerkList(dh, refToEditorID);
-		for (int i = 0; i < g_TempCount; i++)
-			g_List.push_back(g_TempStrings[i]);
-		TempFree();
+		BuildRefToEditorIDMap(refToEditorID);
+		CollectPerks(dh, refToEditorID, g_List);
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
@@ -797,18 +667,16 @@ namespace QuestObjectives {
 		g_LastQuestID = questEditorID;
 		TESQuest* quest = (TESQuest*)form;
 
-		__try {
-			auto* node = &quest->lVarOrObjectives;
-			while (node) {
-				if (node->data) {
-					auto* obj = (BGSQuestObjective*)node->data;
-					UInt32 vtbl = *(UInt32*)obj;
-					if (vtbl == kVtbl_BGSQuestObjective)
-						g_List.push_back(obj->objectiveId);
-				}
-				node = node->next;
+		auto* node = &quest->lVarOrObjectives;
+		while (node) {
+			if (node->data) {
+				auto* obj = (BGSQuestObjective*)node->data;
+				UInt32 vtbl = *(UInt32*)obj;
+				if (vtbl == kVtbl_BGSQuestObjective)
+					g_List.push_back(obj->objectiveId);
 			}
-		} __except(EXCEPTION_EXECUTE_HANDLER) {}
+			node = node->next;
+		}
 
 		std::sort(g_List.begin(), g_List.end());
 	}
@@ -829,14 +697,12 @@ namespace QuestStages {
 		g_LastQuestID = questEditorID;
 		TESQuest* quest = (TESQuest*)form;
 
-		__try {
-			auto* node = &quest->stages;
-			while (node) {
-				if (node->data)
-					g_List.push_back(node->data->stage);
-				node = node->next;
-			}
-		} __except(EXCEPTION_EXECUTE_HANDLER) {}
+		auto* node = &quest->stages;
+		while (node) {
+			if (node->data)
+				g_List.push_back(node->data->stage);
+			node = node->next;
+		}
 
 		std::sort(g_List.begin(), g_List.end());
 	}
@@ -880,31 +746,27 @@ namespace Aliases {
 	}
 }
 
-static int SafeCollectQuestVars(const char* questEditorID) {
-	TempInit(256);
-	__try {
-		TESForm* form = LookupFormByEditorID(questEditorID);
-		if (!form || form->typeID != kFormType_Quest) return 0;
+static void CollectQuestVars(const char* questEditorID, std::vector<std::string>& out) {
+	TESForm* form = LookupFormByEditorID(questEditorID);
+	if (!form || form->typeID != kFormType_Quest) return;
 
-		//quest+0x1C = Script* (TESScriptableForm::pScript)
-		UInt8* script = *(UInt8**)((UInt8*)form + 0x1C);
-		if (!script) return 0;
+	//quest+0x1C = Script* (TESScriptableForm::pScript)
+	UInt8* script = *(UInt8**)((UInt8*)form + 0x1C);
+	if (!script) return;
 
-		//script+0x4C = BSSimpleList<ScriptVariable*> (first node inline)
-		struct VarNode { void* data; VarNode* next; };
-		VarNode* node = (VarNode*)(script + 0x4C);
+	//script+0x4C = BSSimpleList<ScriptVariable*> (first node inline)
+	struct VarNode { void* data; VarNode* next; };
+	VarNode* node = (VarNode*)(script + 0x4C);
 
-		while (node && g_TempCount < 256) {
-			if (node->data) {
-				//ScriptVariable+0x18 = BSString (char* at +0x00)
-				char* varName = *(char**)((UInt8*)node->data + 0x18);
-				if (varName && *varName)
-					g_TempStrings[g_TempCount++] = varName;
-			}
-			node = node->next;
+	while (node) {
+		if (node->data) {
+			//ScriptVariable+0x18 = BSString (char* at +0x00)
+			char* varName = *(char**)((UInt8*)node->data + 0x18);
+			if (varName && *varName)
+				out.push_back(varName);
 		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
-	return g_TempCount;
+		node = node->next;
+	}
 }
 
 namespace Autocomplete {
@@ -1006,14 +868,8 @@ namespace Autocomplete {
 		g_MatchIndex = -1;
 		if (!questEditorID || !*questEditorID) return;
 
-		static std::vector<std::string> varNames;
-		varNames.clear();
-
-		int count = SafeCollectQuestVars(questEditorID);
-		for (int i = 0; i < count; i++)
-			varNames.push_back(g_TempStrings[i]);
-		TempFree();
-
+		std::vector<std::string> varNames;
+		CollectQuestVars(questEditorID, varNames);
 		if (varNames.empty()) return;
 
 		std::sort(varNames.begin(), varNames.end(), [](const std::string& a, const std::string& b) {
