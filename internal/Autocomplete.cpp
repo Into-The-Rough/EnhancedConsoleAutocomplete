@@ -111,7 +111,7 @@ float GetActorValueForRef(void* ref, UInt32 avCode) {
 	return GetAV(avOwner, avCode);
 }
 
-static TESForm* LookupByEditorID(const char* editorID) {
+TESForm* LookupFormByEditorID(const char* editorID) {
 	auto* map = *g_EditorIDMap;
 	if (!map || !editorID) return nullptr;
 	for (UInt32 b = 0; b < map->numBuckets; b++) {
@@ -153,10 +153,6 @@ void SetCommandTable(NVSECommandTableInterface* table) {
 
 NVSECommandTableInterface* GetCommandTable() {
 	return g_CmdTable;
-}
-
-TESForm* LookupFormByEditorID(const char* editorID) {
-	return LookupByEditorID(editorID);
 }
 
 namespace Cells {
@@ -241,14 +237,9 @@ const CommandInfo* GetCommandInfoByName(const char* name) {
 static bool ReadParamInfo(const CommandInfo* cmd, int index, const char** outTypeStr, bool* outOptional) {
 	if (!cmd->params) return false;
 	ParamInfo* p = &cmd->params[index];
+	if (!p->typeStr || !*p->typeStr) return false;
 
-	const char* ts = p->typeStr;
-	if (!ts || (uintptr_t)ts < 0x10000 || (uintptr_t)ts > 0x7FFFFFFF) return false;
-
-	char firstChar = *ts;
-	if (firstChar < 0x20 || firstChar > 0x7E) return false;
-
-	*outTypeStr = ts;
+	*outTypeStr = p->typeStr;
 	*outOptional = p->isOptional != 0;
 	return true;
 }
@@ -262,8 +253,6 @@ std::string FormatCommandParams(const CommandInfo* cmd) {
 		bool isOptional = false;
 
 		if (!ReadParamInfo(cmd, i, &typeStr, &isOptional)) continue;
-
-		if (!typeStr || !*typeStr) typeStr = "?";
 
 		std::string cleanType = typeStr;
 		size_t optPos = cleanType.find(" (Optional)");
@@ -672,7 +661,7 @@ namespace QuestObjectives {
 			if (node->data) {
 				auto* obj = (BGSQuestObjective*)node->data;
 				UInt32 vtbl = *(UInt32*)obj;
-				if (vtbl == kVtbl_BGSQuestObjective)
+				if (vtbl == 0x1047088)
 					g_List.push_back(obj->objectiveId);
 			}
 			node = node->next;

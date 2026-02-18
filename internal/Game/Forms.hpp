@@ -31,8 +31,6 @@ struct BGSQuestObjective {
 	void* quest;
 };
 
-constexpr UInt32 kVtbl_BGSQuestObjective = 0x1047088;
-
 struct StageInfo {
 	UInt8 stage;
 	UInt8 unk01;

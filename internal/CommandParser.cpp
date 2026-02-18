@@ -65,52 +65,44 @@ static const char* CopyCmdName(const char* src, size_t len) {
 CommandType InferTypeFromCommand(const char* cmdName, int paramIndex) {
 	if (!cmdName || !cmdName[0]) return CommandType::None;
 
-	__try {
-		const CommandInfo* cmd = GetCommandInfoByName(cmdName);
-		if (!cmd) return CommandType::None;
-		if (cmd->numParams <= paramIndex) return CommandType::None;
-		if (!cmd->params) return CommandType::None;
+	const CommandInfo* cmd = GetCommandInfoByName(cmdName);
+	if (!cmd) return CommandType::None;
+	if (cmd->numParams <= paramIndex) return CommandType::None;
+	if (!cmd->params) return CommandType::None;
 
-		UInt32 paramType = cmd->params[paramIndex].typeID;
-		switch (paramType) {
-			case kParamType_Cell:               return CommandType::Coc;
-			case kParamType_ActorValue:         return CommandType::ActorValue;
-			case kParamType_Quest:              return CommandType::Quest;
-			case kParamType_QuestStage:         return CommandType::QuestStage;
-			case kParamType_SpellItem:          return CommandType::Spell;
-			case kParamType_MagicItem:          return CommandType::Spell;
-			case kParamType_Perk:               return CommandType::Perk;
-			case kParamType_Note:               return CommandType::Note;
-			case kParamType_Faction:            return CommandType::Faction;
-			case kParamType_Sound:              return CommandType::Sound;
-			case kParamType_ImageSpaceModifier: return CommandType::ImageSpaceModifier;
-			case kParamType_WeatherID:          return CommandType::Weather;
-			case kParamType_WorldSpace:         return CommandType::WorldSpace;
-			case kParamType_FormList:           return CommandType::FormList;
-			default:                            return CommandType::None;
-		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return CommandType::None;
+	UInt32 paramType = cmd->params[paramIndex].typeID;
+	switch (paramType) {
+		case kParamType_Cell:               return CommandType::Coc;
+		case kParamType_ActorValue:         return CommandType::ActorValue;
+		case kParamType_Quest:              return CommandType::Quest;
+		case kParamType_QuestStage:         return CommandType::QuestStage;
+		case kParamType_SpellItem:          return CommandType::Spell;
+		case kParamType_MagicItem:          return CommandType::Spell;
+		case kParamType_Perk:               return CommandType::Perk;
+		case kParamType_Note:               return CommandType::Note;
+		case kParamType_Faction:            return CommandType::Faction;
+		case kParamType_Sound:              return CommandType::Sound;
+		case kParamType_ImageSpaceModifier: return CommandType::ImageSpaceModifier;
+		case kParamType_WeatherID:          return CommandType::Weather;
+		case kParamType_WorldSpace:         return CommandType::WorldSpace;
+		case kParamType_FormList:           return CommandType::FormList;
+		default:                            return CommandType::None;
 	}
 }
 
 CommandType InferTypeForSecondParam(const char* cmdName) {
 	if (!cmdName || !cmdName[0]) return CommandType::None;
 
-	__try {
-		const CommandInfo* cmd = GetCommandInfoByName(cmdName);
-		if (!cmd) return CommandType::None;
-		if (cmd->numParams < 2) return CommandType::None;
-		if (!cmd->params) return CommandType::None;
+	const CommandInfo* cmd = GetCommandInfoByName(cmdName);
+	if (!cmd) return CommandType::None;
+	if (cmd->numParams < 2) return CommandType::None;
+	if (!cmd->params) return CommandType::None;
 
-		UInt32 paramType = cmd->params[1].typeID;
-		if (paramType == kParamType_QuestStage) return CommandType::QuestStage;
-		if (paramType == kParamType_Integer && cmd->params[0].typeID == kParamType_Quest)
-			return CommandType::QuestObjective;
-		return CommandType::None;
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		return CommandType::None;
-	}
+	UInt32 paramType = cmd->params[1].typeID;
+	if (paramType == kParamType_QuestStage) return CommandType::QuestStage;
+	if (paramType == kParamType_Integer && cmd->params[0].typeID == kParamType_Quest)
+		return CommandType::QuestObjective;
+	return CommandType::None;
 }
 
 struct RefCommand {
@@ -297,10 +289,7 @@ CommandMatch ParseCommand(const char* s) {
 				const char* afterQuote = closeQuote + 1;
 				while (*afterQuote && isspace(*afterQuote)) afterQuote++;
 
-				// We're at the form type position
 				result.type = CommandType::FormType;
-
-				// Build cmdName: "search " + quoted part
 				static char searchCmdBuf[256];
 				size_t quotedLen = closeQuote - afterSearch + 1;
 				if (7 + quotedLen < sizeof(searchCmdBuf)) {
@@ -337,7 +326,6 @@ found:
 			}
 		}
 	} else {
-		// Use cmdStart (after ref prefix if any) for command parsing
 		while (*cmdStart && isspace(*cmdStart)) cmdStart++;
 		const char* space = strchr(cmdStart, ' ');
 		if (space) {
@@ -395,16 +383,14 @@ found:
 				}
 			}
 		} else if (*cmdStart) {
-			// No space - user is typing a command name (possibly with ref prefix)
 			result.type = CommandType::CommandName;
-			result.arg = cmdStart;  // Just the command part after the dot
-			// Store ref prefix for reconstruction
+			result.arg = cmdStart;
 			if (refPrefix) {
 				static char refBuf[128];
 				if (refPrefixLen < sizeof(refBuf)) {
 					memcpy(refBuf, refPrefix, refPrefixLen);
 					refBuf[refPrefixLen] = '\0';
-					result.cmdName = refBuf;  // Use cmdName to store ref prefix
+					result.cmdName = refBuf;
 				}
 			} else {
 				result.cmdName = nullptr;

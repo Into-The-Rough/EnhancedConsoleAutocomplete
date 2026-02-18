@@ -7,8 +7,6 @@
 #define PLUGIN_NAME "Enhanced Console Autocomplete"
 #define PLUGIN_VERSION 1
 
-static constexpr UInt32 kGameVersion = 0x040020D0;
-
 int g_MatchListSize = 5;
 
 static void LoadINI() {
@@ -34,7 +32,7 @@ extern "C" __declspec(dllexport) bool NVSEPlugin_Query(const NVSEInterface* nvse
 	info->infoVersion = PluginInfo::kInfoVersion;
 	info->name = PLUGIN_NAME;
 	info->version = PLUGIN_VERSION;
-	return !nvse->isEditor && nvse->runtimeVersion == kGameVersion;
+	return !nvse->isEditor && nvse->runtimeVersion == 0x040020D0;
 }
 
 extern "C" __declspec(dllexport) bool NVSEPlugin_Load(const NVSEInterface* nvse) {
