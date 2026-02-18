@@ -14,35 +14,26 @@ static const _GetActorValueName GetActorValueName = (_GetActorValueName)0x66EAC0
 
 static NVSECommandTableInterface* g_CmdTable = nullptr;
 
-static const UInt32 kConsoleCommandsStart = 0x0118E8E0;
-static const UInt32 kConsoleCommandsEnd = 0x011908C0;
-static const UInt32 kScriptCommandsStart = 0x01190910;
-static const UInt32 kScriptCommandsEnd = 0x01196D10;
 
-//seh-safe iteration helpers - no C++ objects with destructors allowed
-static const char** g_TempStrings = nullptr;
-static UInt8* g_TempTypes = nullptr;
+//seh-safe iteration helpers - vectors must not be in scope inside __try
+static std::vector<const char*> g_TempStrings;
+static std::vector<UInt8> g_TempTypes;
 static int g_TempCount = 0;
-static int g_TempCapacity = 0;
 
 static void TempInit(int capacity) {
-	g_TempCapacity = capacity;
-	g_TempStrings = new const char*[capacity];
-	g_TempTypes = new UInt8[capacity];
+	g_TempStrings.resize(capacity);
+	g_TempTypes.resize(capacity);
 	g_TempCount = 0;
 }
 
 static void TempFree() {
-	delete[] g_TempStrings;
-	delete[] g_TempTypes;
-	g_TempStrings = nullptr;
-	g_TempTypes = nullptr;
+	g_TempStrings.clear();
+	g_TempTypes.clear();
 	g_TempCount = 0;
-	g_TempCapacity = 0;
 }
 
 static void TempAdd(const char* str, UInt8 type = 0) {
-	if (g_TempCount < g_TempCapacity) {
+	if (g_TempCount < (int)g_TempStrings.size()) {
 		g_TempStrings[g_TempCount] = str;
 		g_TempTypes[g_TempCount] = type;
 		g_TempCount++;
@@ -290,36 +281,16 @@ namespace ActorValues {
 }
 
 const CommandInfo* GetCommandInfoByName(const char* name) {
-	if (!name || !*name) return nullptr;
+	if (!name || !*name || !g_CmdTable) return nullptr;
 
-	if (g_CmdTable) {
-		const CommandInfo* cmd = g_CmdTable->GetByName(name);
-		if (cmd) return cmd;
+	const CommandInfo* cmd = g_CmdTable->GetByName(name);
+	if (cmd) return cmd;
 
-		//GetByName doesn't check shortName, iterate manually
-		__try {
-			for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
-				if (c->shortName && _stricmp(c->shortName, name) == 0)
-					return c;
-			}
-		} __except(EXCEPTION_EXECUTE_HANDLER) {}
-	}
-
+	//GetByName doesn't check shortName
 	__try {
-		for (auto* cmd = (CommandInfo*)kConsoleCommandsStart; cmd < (CommandInfo*)kConsoleCommandsEnd; cmd++) {
-			if ((cmd->longName && _stricmp(cmd->longName, name) == 0) ||
-			    (cmd->shortName && _stricmp(cmd->shortName, name) == 0)) {
-				return cmd;
-			}
-		}
-	} __except(EXCEPTION_EXECUTE_HANDLER) {}
-
-	__try {
-		for (auto* cmd = (CommandInfo*)kScriptCommandsStart; cmd < (CommandInfo*)kScriptCommandsEnd; cmd++) {
-			if ((cmd->longName && _stricmp(cmd->longName, name) == 0) ||
-			    (cmd->shortName && _stricmp(cmd->shortName, name) == 0)) {
-				return cmd;
-			}
+		for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
+			if (c->shortName && _stricmp(c->shortName, name) == 0)
+				return c;
 		}
 	} __except(EXCEPTION_EXECUTE_HANDLER) {}
 
@@ -377,72 +348,26 @@ namespace CommandNames {
 	std::vector<std::string> g_List;
 	static bool g_Built = false;
 
-	static const char** g_TempNames = nullptr;
-	static int g_TempCount = 0;
-	static int g_TempCapacity = 0;
-
-	void TempAdd(const char* name) {
-		if (g_TempCount >= g_TempCapacity) return;
-		g_TempNames[g_TempCount++] = name;
-	}
-
-	bool IterateVanillaConsole() {
-		__try {
-			for (auto* cmd = (CommandInfo*)kConsoleCommandsStart; cmd < (CommandInfo*)kConsoleCommandsEnd; cmd++) {
-				if (cmd->longName) TempAdd(cmd->longName);
-				if (cmd->shortName) TempAdd(cmd->shortName);
-			}
-			return true;
-		} __except(EXCEPTION_EXECUTE_HANDLER) {
-			return false;
-		}
-	}
-
-	bool IterateVanillaScript() {
-		__try {
-			for (auto* cmd = (CommandInfo*)kScriptCommandsStart; cmd < (CommandInfo*)kScriptCommandsEnd; cmd++) {
-				if (cmd->longName) TempAdd(cmd->longName);
-				if (cmd->shortName) TempAdd(cmd->shortName);
-			}
-			return true;
-		} __except(EXCEPTION_EXECUTE_HANDLER) {
-			return false;
-		}
-	}
-
-	bool IterateNVSE() {
+	static bool SafeIterateCommandTable() {
 		if (!g_CmdTable) return false;
-
 		__try {
-			for (UInt32 opcode = 0x1400; opcode < 0x8000; opcode++) {
-				const CommandInfo* cmd = g_CmdTable->GetByOpcode(opcode);
-				if (cmd) {
-					__try {
-						if (cmd->longName && cmd->longName[0]) TempAdd(cmd->longName);
-						if (cmd->shortName && cmd->shortName[0]) TempAdd(cmd->shortName);
-					} __except(EXCEPTION_EXECUTE_HANDLER) {}
-				}
+			for (auto* cmd = g_CmdTable->Start(); cmd < g_CmdTable->End(); cmd++) {
+				if (cmd->longName && cmd->longName[0]) TempAdd(cmd->longName);
+				if (cmd->shortName && cmd->shortName[0]) TempAdd(cmd->shortName);
 			}
 			return true;
-		} __except(EXCEPTION_EXECUTE_HANDLER) {
-			return false;
-		}
+		} __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
 	}
 
 	void Build() {
 		if (g_Built) return;
 
-		g_TempCapacity = 16384;
-		g_TempNames = new const char*[g_TempCapacity];
-		g_TempCount = 0;
-
-		IterateVanillaConsole();
-		IterateVanillaScript();
-		IterateNVSE();
+		TempInit(16384);
+		SafeIterateCommandTable();
 
 		std::unordered_map<std::string, bool> seen;
 		for (int i = 0; i < g_TempCount; i++) {
-			const char* name = g_TempNames[i];
+			const char* name = g_TempStrings[i];
 			if (!name || !*name) continue;
 			std::string lower = name;
 			std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
@@ -451,9 +376,7 @@ namespace CommandNames {
 				g_List.push_back(name);
 			}
 		}
-
-		delete[] g_TempNames;
-		g_TempNames = nullptr;
+		TempFree();
 
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
