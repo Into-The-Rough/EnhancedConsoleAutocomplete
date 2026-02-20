@@ -10,7 +10,10 @@ struct SubrecordHeader { char type[4]; UInt16 dataSize; };
 struct GroupHeader { char type[4]; UInt32 groupSize, label, groupType, timestamp, unknown; };
 #pragma pack(pop)
 
-static void ParsePlugin(const char* path, std::vector<std::string>& out) {
+static std::vector<CachedForm> g_Forms;
+static bool g_Built = false;
+
+static void ParsePlugin(const char* path) {
 	HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
 	if (hFile == INVALID_HANDLE_VALUE) return;
 
@@ -40,36 +43,36 @@ static void ParsePlugin(const char* path, std::vector<std::string>& out) {
 			continue;
 		}
 
-		if (memcmp(data + pos, "CELL", 4) == 0) {
-			if (pos + sizeof(RecordHeader) > fileSize) break;
-			auto* rec = (const RecordHeader*)(data + pos);
-			size_t dataStart = pos + sizeof(RecordHeader);
-			size_t dataEnd = dataStart + rec->dataSize;
+		if (pos + sizeof(RecordHeader) > fileSize) break;
+		auto* rec = (const RecordHeader*)(data + pos);
+		size_t dataStart = pos + sizeof(RecordHeader);
+		size_t dataEnd = dataStart + rec->dataSize;
 
-			if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) {
-				size_t subPos = dataStart;
-				while (subPos + sizeof(SubrecordHeader) < dataEnd) {
-					auto* sub = (const SubrecordHeader*)(data + subPos);
-					size_t subDataStart = subPos + sizeof(SubrecordHeader);
-					if (subDataStart + sub->dataSize > dataEnd) break;
+		if (rec->dataSize > fileSize - pos - sizeof(RecordHeader)) break;
 
-					if (memcmp(sub->type, "EDID", 4) == 0 && sub->dataSize > 0) {
-						std::string edid((const char*)(data + subDataStart), sub->dataSize - 1);
-						if (!edid.empty()) out.push_back(edid);
-						break;
+		//extract EDID from uncompressed records
+		if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) {
+			size_t subPos = dataStart;
+			while (subPos + sizeof(SubrecordHeader) < dataEnd) {
+				auto* sub = (const SubrecordHeader*)(data + subPos);
+				size_t subDataStart = subPos + sizeof(SubrecordHeader);
+				if (subDataStart + sub->dataSize > dataEnd) break;
+
+				if (memcmp(sub->type, "EDID", 4) == 0 && sub->dataSize > 0) {
+					std::string edid((const char*)(data + subDataStart), sub->dataSize - 1);
+					if (!edid.empty()) {
+						CachedForm cf;
+						cf.editorID = std::move(edid);
+						memcpy(cf.type, rec->type, 4);
+						g_Forms.push_back(std::move(cf));
 					}
-					subPos = subDataStart + sub->dataSize;
+					break;
 				}
+				subPos = subDataStart + sub->dataSize;
 			}
-			if (rec->dataSize > fileSize - pos - sizeof(RecordHeader)) break;
-			pos += sizeof(RecordHeader) + rec->dataSize;
-			continue;
 		}
 
-		if (pos + sizeof(RecordHeader) > fileSize) break;
-		UInt32 recSize = ((const RecordHeader*)(data + pos))->dataSize;
-		if (recSize > fileSize - pos - sizeof(RecordHeader)) break;
-		pos += sizeof(RecordHeader) + recSize;
+		pos += sizeof(RecordHeader) + rec->dataSize;
 	}
 
 	UnmapViewOfFile(data);
@@ -77,7 +80,9 @@ static void ParsePlugin(const char* path, std::vector<std::string>& out) {
 	CloseHandle(hFile);
 }
 
-void BuildCellList(std::vector<std::string>& out) {
+void Build() {
+	if (g_Built) return;
+
 	char dataPath[MAX_PATH];
 	GetModuleFileNameA(nullptr, dataPath, MAX_PATH);
 	if (char* p = strrchr(dataPath, '\\')) *p = '\0';
@@ -93,11 +98,17 @@ void BuildCellList(std::vector<std::string>& out) {
 			do {
 				char fullPath[MAX_PATH];
 				sprintf_s(fullPath, "%s%s", dataPath, fd.cFileName);
-				ParsePlugin(fullPath, out);
+				ParsePlugin(fullPath);
 			} while (FindNextFileA(hFind, &fd));
 			FindClose(hFind);
 		}
 	}
+
+	g_Built = true;
 }
+
+bool IsBuilt() { return g_Built; }
+
+const std::vector<CachedForm>& GetAll() { return g_Forms; }
 
 }

@@ -2,6 +2,13 @@
 #include <vector>
 #include <string>
 
+struct CachedForm {
+	std::string editorID;
+	char type[4];
+};
+
 namespace Cache {
-	void BuildCellList(std::vector<std::string>& out);
+	void Build();
+	bool IsBuilt();
+	const std::vector<CachedForm>& GetAll();
 }

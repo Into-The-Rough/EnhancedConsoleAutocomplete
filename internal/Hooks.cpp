@@ -1,5 +1,6 @@
 #include "Hooks.hpp"
 #include "Autocomplete.hpp"
+#include "Cache.hpp"
 #include "HistorySearch.hpp"
 #include "CommandParser.hpp"
 #include "Game/ConsoleManager.hpp"
@@ -222,65 +223,26 @@ static bool __fastcall HookHandler(ConsoleManager* mgr, void*, int key) {
 						Autocomplete::Next();
 				} else {
 					Autocomplete::g_LastType = cmd.type;
-					if (cmd.type == CommandType::Coc) {
-						Cells::Build(IsCtrlHeld());
-						Autocomplete::FindCells(cmd.arg);
+
+					const char* recType = CommandTypeToRecordType(cmd.type);
+					if (recType) {
+						Autocomplete::FindForms(recType, cmd.arg);
 					} else if (cmd.type == CommandType::GameSetting) {
 						GameSettings::Build();
 						Autocomplete::FindSettings(cmd.arg);
 					} else if (cmd.type == CommandType::ActorValue) {
 						ActorValues::Build();
 						Autocomplete::FindActorValues(cmd.arg);
-					} else if (cmd.type == CommandType::Quest) {
-						Quests::Build();
-						Autocomplete::FindQuests(cmd.arg);
 					} else if (cmd.type == CommandType::QuestObjective) {
-						if (cmd.arg2 != nullptr) {
+						if (cmd.arg2 != nullptr)
 							Autocomplete::FindObjectives(cmd.arg, cmd.arg2);
-						} else {
-							Quests::Build();
-							Autocomplete::FindQuests(cmd.arg);
-						}
+						else
+							Autocomplete::FindForms("QUST", cmd.arg);
 					} else if (cmd.type == CommandType::QuestStage) {
-						if (cmd.arg2 != nullptr) {
+						if (cmd.arg2 != nullptr)
 							Autocomplete::FindStages(cmd.arg, cmd.arg2);
-						} else {
-							Quests::Build();
-							Autocomplete::FindQuests(cmd.arg);
-						}
-					} else if (cmd.type == CommandType::Perk) {
-						Perks::Build();
-						Autocomplete::FindPerks(cmd.arg);
-					} else if (cmd.type == CommandType::Note) {
-						Notes::Build();
-						Autocomplete::FindNotes(cmd.arg);
-					} else if (cmd.type == CommandType::Faction) {
-						Factions::Build();
-						Autocomplete::FindFactions(cmd.arg);
-					} else if (cmd.type == CommandType::Sound) {
-						Sounds::Build();
-						Autocomplete::FindSounds(cmd.arg);
-					} else if (cmd.type == CommandType::ImageSpaceModifier) {
-						ImageSpaceModifiers::Build();
-						Autocomplete::FindImageSpaceModifiers(cmd.arg);
-					} else if (cmd.type == CommandType::Weather) {
-						Weathers::Build();
-						Autocomplete::FindWeathers(cmd.arg);
-					} else if (cmd.type == CommandType::WorldSpace) {
-						WorldSpaces::Build();
-						Autocomplete::FindWorldSpaces(cmd.arg);
-					} else if (cmd.type == CommandType::Idle) {
-						Idles::Build();
-						Autocomplete::FindIdles(cmd.arg);
-					} else if (cmd.type == CommandType::Music) {
-						MusicTypes::Build();
-						Autocomplete::FindMusicTypes(cmd.arg);
-					} else if (cmd.type == CommandType::FormList) {
-						FormLists::Build();
-						Autocomplete::FindFormLists(cmd.arg);
-					} else if (cmd.type == CommandType::Spell) {
-						Spells::Build();
-						Autocomplete::FindSpells(cmd.arg);
+						else
+							Autocomplete::FindForms("QUST", cmd.arg);
 					} else if (cmd.type == CommandType::QuestVariable) {
 						Autocomplete::FindQuestVariables(cmd.cmdName, cmd.arg);
 					} else if (cmd.type == CommandType::Alias) {
@@ -289,13 +251,13 @@ static bool __fastcall HookHandler(ConsoleManager* mgr, void*, int key) {
 						FormTypes::Build();
 						Autocomplete::FindFormTypes(cmd.arg);
 					} else if (cmd.type == CommandType::InventoryItem) {
-						BaseForms::Build(IsCtrlHeld());
+						BaseForms::Build();
 						Autocomplete::FindBaseForms(cmd.arg, BaseFormCategory::Inventory);
 					} else if (cmd.type == CommandType::EquippableItem) {
-						BaseForms::Build(IsCtrlHeld());
+						BaseForms::Build();
 						Autocomplete::FindBaseForms(cmd.arg, BaseFormCategory::Equippable);
 					} else if (cmd.type == CommandType::PlaceableForm) {
-						BaseForms::Build(IsCtrlHeld());
+						BaseForms::Build();
 						Autocomplete::FindBaseForms(cmd.arg, BaseFormCategory::Placeable);
 					} else if (cmd.type == CommandType::CommandName) {
 						CommandNames::Build();
@@ -359,6 +321,31 @@ struct NiColorAlpha { float r, g, b, a; };
 
 static NiColorAlpha g_GrayColor = { 0.6f, 0.6f, 0.6f, 0.7f };
 static const UInt32 kDebugTextPrint = 0xA0F8B0;
+
+static const char* GetTypeHint(CommandType type) {
+	switch (type) {
+		case CommandType::Coc:                return "cells";
+		case CommandType::Quest:              return "quests";
+		case CommandType::QuestStage:         return "quest stages";
+		case CommandType::QuestObjective:     return "quest objectives";
+		case CommandType::Perk:               return "perks";
+		case CommandType::Note:               return "notes";
+		case CommandType::Faction:            return "factions";
+		case CommandType::Sound:              return "sounds";
+		case CommandType::ImageSpaceModifier: return "image space modifiers";
+		case CommandType::Weather:            return "weathers";
+		case CommandType::WorldSpace:         return "world spaces";
+		case CommandType::Idle:               return "idle animations";
+		case CommandType::Music:              return "music types";
+		case CommandType::FormList:           return "form lists";
+		case CommandType::Spell:              return "spells";
+		case CommandType::FormType:           return "form types";
+		case CommandType::InventoryItem:      return "items";
+		case CommandType::EquippableItem:     return "equippables";
+		case CommandType::PlaceableForm:      return "placeables";
+		default:                              return nullptr;
+	}
+}
 
 static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float xPos, float yPos, int alignment, int a6, float duration, int fontNumber, NiColorAlpha* color) {
 	ConsoleManager* mgr = ConsoleManager::GetSingleton();
@@ -458,52 +445,22 @@ static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float x
 			}
 			if (!showed)
 				renderPadded(g_CmdSuggestion.empty() ? "Press TAB to cycle game settings" : g_CmdSuggestion.c_str());
-		} else if (cmd.type == CommandType::Coc) {
-			if (!Cells::IsBuilt())
-				renderPadded("Press TAB to load cells...");
-			else
-				renderPadded(g_CmdSuggestion.empty() ? "Press TAB to search" : g_CmdSuggestion.c_str());
-		} else if (cmd.type == CommandType::InventoryItem || cmd.type == CommandType::EquippableItem || cmd.type == CommandType::PlaceableForm) {
-			if (!g_CmdSuggestion.empty()) {
-				renderPadded(g_CmdSuggestion.c_str());
-			} else if (!BaseForms::IsBuilt()) {
-				const char* label = cmd.type == CommandType::EquippableItem ? "equippables" :
-				                    cmd.type == CommandType::PlaceableForm ? "placeables" : "items";
-				char buf[64];
-				snprintf(buf, sizeof(buf), "Press TAB to load %s (WARNING: could be slow)", label);
-				renderPadded(buf);
-			} else {
-				const char* label = cmd.type == CommandType::EquippableItem ? "equippables" :
-				                    cmd.type == CommandType::PlaceableForm ? "placeables" : "items";
-				char buf[64];
-				snprintf(buf, sizeof(buf), "Press TAB to cycle %s", label);
-				renderPadded(buf);
-			}
 		} else if (cmd.type != CommandType::None && cmd.type != CommandType::CommandName
 		        && cmd.type != CommandType::QuestVariable && cmd.type != CommandType::Alias) {
 			if (!g_CmdSuggestion.empty()) {
 				renderPadded(g_CmdSuggestion.c_str());
 			} else {
-				const char* hint = nullptr;
-				switch (cmd.type) {
-					case CommandType::Perk: hint = "Press TAB to cycle perks"; break;
-					case CommandType::Note: hint = "Press TAB to cycle notes"; break;
-					case CommandType::Faction: hint = "Press TAB to cycle factions"; break;
-					case CommandType::Sound: hint = "Press TAB to cycle sounds"; break;
-					case CommandType::ImageSpaceModifier: hint = "Press TAB to cycle image space modifiers"; break;
-					case CommandType::Weather: hint = "Press TAB to cycle weathers"; break;
-					case CommandType::WorldSpace: hint = "Press TAB to cycle world spaces"; break;
-					case CommandType::Quest: hint = "Press TAB to cycle quests"; break;
-					case CommandType::QuestStage: hint = "Press TAB to cycle quest stages"; break;
-					case CommandType::QuestObjective: hint = "Press TAB to cycle quest objectives"; break;
-					case CommandType::Idle: hint = "Press TAB to cycle idle animations"; break;
-					case CommandType::Music: hint = "Press TAB to cycle music types"; break;
-					case CommandType::FormList: hint = "Press TAB to cycle form lists"; break;
-					case CommandType::Spell: hint = "Press TAB to cycle spells"; break;
-					case CommandType::FormType: hint = "Press TAB to cycle form types"; break;
-					default: break;
+				const char* hint = GetTypeHint(cmd.type);
+				if (hint) {
+					char buf[64];
+					if (!Cache::IsBuilt())
+						snprintf(buf, sizeof(buf), "Press TAB to load %s...", hint);
+					else
+						snprintf(buf, sizeof(buf), "Press TAB to cycle %s", hint);
+					renderPadded(buf);
+				} else {
+					renderPadded("");
 				}
-				renderPadded(hint ? hint : "");
 			}
 		} else if (!g_CmdSuggestion.empty()) {
 			renderPadded(g_CmdSuggestion.c_str());

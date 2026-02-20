@@ -1,44 +1,17 @@
 #include "Autocomplete.hpp"
 #include "Cache.hpp"
-#include "Game/Forms.hpp"
 #include <algorithm>
 #include <unordered_map>
 
 static constexpr UInt32 kActorValueMax = 76;
 
 static auto** g_EditorIDMap = reinterpret_cast<NiTMapBase<const char*, TESForm*>**>(0x11C54C8);
-static auto** g_DataHandler = reinterpret_cast<void**>(0x11C3F2C);
 static auto** g_GameSettingCollection = reinterpret_cast<GameSettingCollection**>(0x11C8048);
 
 static const _GetActorValueName GetActorValueName = (_GetActorValueName)0x66EAC0;
 
 static NVSECommandTableInterface* g_CmdTable = nullptr;
 
-
-static void CollectEditorIDs(UInt8 filterType, std::vector<std::string>& out) {
-	auto* map = *g_EditorIDMap;
-	if (!map) return;
-	for (UInt32 b = 0; b < map->numBuckets; b++) {
-		for (auto* e = map->buckets[b]; e; e = e->next) {
-			if (e->data && e->data->typeID == filterType && e->key && *e->key)
-				out.push_back(e->key);
-		}
-	}
-}
-
-static void CollectAllEditorIDs(bool (*excludeFunc)(UInt8), std::vector<BaseFormEntry>& out) {
-	auto* map = *g_EditorIDMap;
-	if (!map) return;
-	for (UInt32 b = 0; b < map->numBuckets; b++) {
-		for (auto* e = map->buckets[b]; e; e = e->next) {
-			if (e->data && e->key && *e->key) {
-				UInt8 type = e->data->typeID;
-				if (!excludeFunc || !excludeFunc(type))
-					out.push_back({ e->key, type });
-			}
-		}
-	}
-}
 
 static void CollectSettings(std::vector<std::string>& out) {
 	auto* coll = *g_GameSettingCollection;
@@ -111,6 +84,7 @@ float GetActorValueForRef(void* ref, UInt32 avCode) {
 	return GetAV(avOwner, avCode);
 }
 
+//still uses runtime map - only for quest lookups where we need the live object
 TESForm* LookupFormByEditorID(const char* editorID) {
 	auto* map = *g_EditorIDMap;
 	if (!map || !editorID) return nullptr;
@@ -123,30 +97,6 @@ TESForm* LookupFormByEditorID(const char* editorID) {
 	return nullptr;
 }
 
-static void BuildRefToEditorIDMap(std::unordered_map<UInt32, const char*>& out) {
-	auto* map = *g_EditorIDMap;
-	if (!map) return;
-	for (UInt32 b = 0; b < map->numBuckets; b++) {
-		for (auto* e = map->buckets[b]; e; e = e->next) {
-			if (e->data && e->key && *e->key)
-				out[e->data->refID] = e->key;
-		}
-	}
-}
-
-static void CollectPerks(void* dh, const std::unordered_map<UInt32, const char*>& refMap, std::vector<std::string>& out) {
-	ListNode<void>* node = (ListNode<void>*)((UInt8*)dh + 0x178);
-	while (node) {
-		if (node->data) {
-			TESForm* form = (TESForm*)node->data;
-			auto it = refMap.find(form->refID);
-			if (it != refMap.end())
-				out.push_back(it->second);
-		}
-		node = node->next;
-	}
-}
-
 void SetCommandTable(NVSECommandTableInterface* table) {
 	g_CmdTable = table;
 }
@@ -155,28 +105,46 @@ NVSECommandTableInterface* GetCommandTable() {
 	return g_CmdTable;
 }
 
-namespace Cells {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
+const char* CommandTypeToRecordType(CommandType type) {
+	switch (type) {
+		case CommandType::Coc:                return "CELL";
+		case CommandType::Quest:              return "QUST";
+		case CommandType::Perk:               return "PERK";
+		case CommandType::Note:               return "NOTE";
+		case CommandType::Faction:            return "FACT";
+		case CommandType::Sound:              return "SOUN";
+		case CommandType::ImageSpaceModifier: return "IMAD";
+		case CommandType::Weather:            return "WTHR";
+		case CommandType::WorldSpace:         return "WRLD";
+		case CommandType::Idle:               return "IDLE";
+		case CommandType::Music:              return "MUSC";
+		case CommandType::FormList:           return "FLST";
+		case CommandType::Spell:              return "SPEL";
+		default:                              return nullptr;
+	}
+}
 
-	bool IsBuilt() { return g_Built; }
+namespace FormCache {
+	static std::unordered_map<std::string, std::vector<std::string>> g_ByType;
 
-	void Build(bool force) {
-		if (g_Built && !force) return;
-		if (force) g_List.clear();
+	const std::vector<std::string>& Get(const char* type4) {
+		Cache::Build();
+		std::string key(type4, 4);
+		auto it = g_ByType.find(key);
+		if (it != g_ByType.end()) return it->second;
 
-		std::vector<std::string> temp;
-		Cache::BuildCellList(temp);
-
-		std::sort(temp.begin(), temp.end(), [](const std::string& a, const std::string& b) {
+		auto& list = g_ByType[key];
+		for (const auto& f : Cache::GetAll()) {
+			if (memcmp(f.type, type4, 4) == 0)
+				list.push_back(f.editorID);
+		}
+		std::sort(list.begin(), list.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
 		});
-		temp.erase(std::unique(temp.begin(), temp.end(), [](const std::string& a, const std::string& b) {
+		list.erase(std::unique(list.begin(), list.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) == 0;
-		}), temp.end());
-
-		g_List = std::move(temp);
-		g_Built = true;
+		}), list.end());
+		return list;
 	}
 }
 
@@ -331,81 +299,40 @@ namespace BaseForms {
 	std::vector<BaseFormEntry> g_List;
 	static bool g_Built = false;
 
-	enum FormTypeID : UInt8 {
-		kType_ACTI = 21,
-		kType_TACT = 22,
-		kType_TERM = 23,
-		kType_ARMO = 24,
-		kType_BOOK = 25,
-		kType_CONT = 27,
-		kType_DOOR = 28,
-		kType_LIGH = 30,
-		kType_MISC = 31,
-		kType_STAT = 32,
-		kType_MSTT = 34,
-		kType_GRAS = 36,
-		kType_TREE = 37,
-		kType_FLOR = 38,
-		kType_FURN = 39,
-		kType_WEAP = 40,
-		kType_AMMO = 41,
-		kType_NPC_ = 43,
-		kType_CREA = 44,
-		kType_KEYM = 46,
-		kType_ALCH = 47,
-		kType_NOTE = 49,
-		kType_PROJ = 51,
-		kType_LVLI = 52,
-		kType_LVLC = 68,
-		kType_LVLN = 69,
-		kType_IMOD = 103,
-		kType_CHIP = 116,
-		kType_CMNY = 117,
-		kType_CCRD = 118,
-	};
+	static bool eq4(const char* a, const char* b) { return memcmp(a, b, 4) == 0; }
 
-	bool IsBuilt() { return g_Built; }
-
-	static bool IsExcludedType(UInt8 type) {
-		if (type == kFormType_REFR || type == kFormType_ACHR || type == kFormType_ACRE)
-			return true;
-		if (type == kFormType_Cell)
-			return true;
-		if (type == kFormType_GMST || type == kFormType_GLOB)
-			return true;
-		if (type == kFormType_DIAL || type == kFormType_INFO)
-			return true;
-		if (type == kFormType_LAND || type == kFormType_NAVM || type == kFormType_NAVI)
-			return true;
-		if (type == kFormType_Quest || type == kFormType_BGSPerk)
-			return true;
-		return false;
+	static bool IsExcludedType(const char* t) {
+		return eq4(t, "REFR") || eq4(t, "ACHR") || eq4(t, "ACRE") ||
+		       eq4(t, "CELL") || eq4(t, "GMST") || eq4(t, "GLOB") ||
+		       eq4(t, "DIAL") || eq4(t, "INFO") || eq4(t, "LAND") ||
+		       eq4(t, "NAVM") || eq4(t, "NAVI") || eq4(t, "QUST") ||
+		       eq4(t, "PERK") || eq4(t, "TES4") || eq4(t, "GRUP");
 	}
 
-	static bool IsInventoryType(UInt8 type) {
-		return type == kType_WEAP || type == kType_ARMO || type == kType_AMMO ||
-		       type == kType_ALCH || type == kType_MISC || type == kType_NOTE ||
-		       type == kType_KEYM || type == kType_BOOK || type == kType_IMOD ||
-		       type == kType_CHIP || type == kType_CMNY || type == kType_CCRD;
+	static bool IsInventoryType(const char* t) {
+		return eq4(t, "WEAP") || eq4(t, "ARMO") || eq4(t, "AMMO") ||
+		       eq4(t, "ALCH") || eq4(t, "MISC") || eq4(t, "NOTE") ||
+		       eq4(t, "KEYM") || eq4(t, "BOOK") || eq4(t, "IMOD") ||
+		       eq4(t, "CHIP") || eq4(t, "CMNY") || eq4(t, "CCRD");
 	}
 
-	static bool IsEquippableType(UInt8 type) {
-		return type == kType_WEAP || type == kType_ARMO;
+	static bool IsEquippableType(const char* t) {
+		return eq4(t, "WEAP") || eq4(t, "ARMO");
 	}
 
-	static bool IsPlaceableType(UInt8 type) {
-		return type == kType_NPC_ || type == kType_CREA || type == kType_WEAP ||
-		       type == kType_ARMO || type == kType_AMMO || type == kType_ALCH ||
-		       type == kType_MISC || type == kType_CONT || type == kType_ACTI ||
-		       type == kType_FURN || type == kType_STAT || type == kType_MSTT ||
-		       type == kType_DOOR || type == kType_LIGH || type == kType_FLOR ||
-		       type == kType_TREE || type == kType_NOTE || type == kType_KEYM ||
-		       type == kType_BOOK || type == kType_TACT || type == kType_TERM ||
-		       type == kType_PROJ || type == kType_LVLI || type == kType_LVLC ||
-		       type == kType_LVLN;
+	static bool IsPlaceableType(const char* t) {
+		return eq4(t, "NPC_") || eq4(t, "CREA") || eq4(t, "WEAP") ||
+		       eq4(t, "ARMO") || eq4(t, "AMMO") || eq4(t, "ALCH") ||
+		       eq4(t, "MISC") || eq4(t, "CONT") || eq4(t, "ACTI") ||
+		       eq4(t, "FURN") || eq4(t, "STAT") || eq4(t, "MSTT") ||
+		       eq4(t, "DOOR") || eq4(t, "LIGH") || eq4(t, "FLOR") ||
+		       eq4(t, "TREE") || eq4(t, "NOTE") || eq4(t, "KEYM") ||
+		       eq4(t, "BOOK") || eq4(t, "TACT") || eq4(t, "TERM") ||
+		       eq4(t, "PROJ") || eq4(t, "LVLI") || eq4(t, "LVLC") ||
+		       eq4(t, "LVLN");
 	}
 
-	bool MatchesCategory(UInt8 type, BaseFormCategory category) {
+	bool MatchesCategory(const char* type, BaseFormCategory category) {
 		switch (category) {
 			case BaseFormCategory::Inventory:  return IsInventoryType(type);
 			case BaseFormCategory::Equippable: return IsEquippableType(type);
@@ -415,225 +342,17 @@ namespace BaseForms {
 		}
 	}
 
-	void Build(bool force) {
-		if (g_Built && !force) return;
-		if (force) g_List.clear();
+	void Build() {
+		if (g_Built) return;
 
-		std::vector<BaseFormEntry> temp;
-		CollectAllEditorIDs(IsExcludedType, temp);
+		Cache::Build();
+		for (const auto& f : Cache::GetAll()) {
+			if (!IsExcludedType(f.type))
+				g_List.push_back({ f.editorID, { f.type[0], f.type[1], f.type[2], f.type[3] } });
+		}
 
-		std::sort(temp.begin(), temp.end(), [](const BaseFormEntry& a, const BaseFormEntry& b) {
+		std::sort(g_List.begin(), g_List.end(), [](const BaseFormEntry& a, const BaseFormEntry& b) {
 			return _stricmp(a.editorID.c_str(), b.editorID.c_str()) < 0;
-		});
-
-		g_List = std::move(temp);
-		g_Built = true;
-	}
-}
-
-namespace Quests {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(kFormType_Quest, g_List);
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Notes {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(49, g_List); //kFormType_Note
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Factions {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(8, g_List); //kFormType_Faction
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Sounds {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(13, g_List); //kFormType_Sound
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace ImageSpaceModifiers {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(84, g_List); //kFormType_ImageSpaceModifier
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Weathers {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x35, g_List); //kFormType_TESWeather
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace WorldSpaces {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x41, g_List); //kFormType_TESWorldSpace
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Idles {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x48, g_List); //kFormType_TESIdleForm
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace MusicTypes {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x66, g_List); //kFormType_BGSMusicType
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace FormLists {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x55, g_List); //kFormType_BGSListForm
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Spells {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		CollectEditorIDs(0x14, g_List); //kFormType_SpellItem
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		g_Built = true;
-	}
-}
-
-namespace Perks {
-	std::vector<std::string> g_List;
-	static bool g_Built = false;
-
-	void Build() {
-		if (g_Built) return;
-
-		void* dh = *g_DataHandler;
-		if (!dh) return;
-
-		std::unordered_map<UInt32, const char*> refToEditorID;
-		BuildRefToEditorIDMap(refToEditorID);
-		CollectPerks(dh, refToEditorID, g_List);
-
-		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
 		});
 
 		g_Built = true;
@@ -795,8 +514,8 @@ namespace Autocomplete {
 		if (!g_Matches.empty()) g_MatchIndex = 0;
 	}
 
-	void FindCells(const char* prefix) {
-		FindInList(Cells::g_List, prefix, [](const std::string& s) { return s.c_str(); });
+	void FindForms(const char* type4, const char* prefix) {
+		FindInList(FormCache::Get(type4), prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
 	void FindSettings(const char* prefix) {
@@ -807,80 +526,16 @@ namespace Autocomplete {
 		FindInList(ActorValues::g_List, prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
-	void FindQuests(const char* prefix) {
-		FindInList(Quests::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindNotes(const char* prefix) {
-		FindInList(Notes::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindFactions(const char* prefix) {
-		FindInList(Factions::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindSounds(const char* prefix) {
-		FindInList(Sounds::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindImageSpaceModifiers(const char* prefix) {
-		FindInList(ImageSpaceModifiers::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindWeathers(const char* prefix) {
-		FindInList(Weathers::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindWorldSpaces(const char* prefix) {
-		FindInList(WorldSpaces::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindIdles(const char* prefix) {
-		FindInList(Idles::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindMusicTypes(const char* prefix) {
-		FindInList(MusicTypes::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindFormLists(const char* prefix) {
-		FindInList(FormLists::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindSpells(const char* prefix) {
-		FindInList(Spells::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindQuestVariables(const char* questEditorID, const char* prefix) {
-		g_Matches.clear();
-		g_MatchIndex = -1;
-		if (!questEditorID || !*questEditorID) return;
-
-		std::vector<std::string> varNames;
-		CollectQuestVars(questEditorID, varNames);
-		if (varNames.empty()) return;
-
-		std::sort(varNames.begin(), varNames.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) < 0;
-		});
-
-		FindInList(varNames, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindAliases(const char* prefix) {
-		FindInList(Aliases::g_Names, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
-	void FindPerks(const char* prefix) {
-		FindInList(Perks::g_List, prefix, [](const std::string& s) { return s.c_str(); });
-	}
-
 	void FindCommands(const char* prefix) {
 		FindInList(CommandNames::g_List, prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
 	void FindFormTypes(const char* prefix) {
 		FindInList(FormTypes::g_List, prefix, [](const char* s) { return s; });
+	}
+
+	void FindAliases(const char* prefix) {
+		FindInList(Aliases::g_Names, prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
 	void FindBaseForms(const char* prefix, BaseFormCategory category) {
@@ -893,7 +548,7 @@ namespace Autocomplete {
 
 		std::vector<std::string> prefixMatches, substringMatches;
 		for (const auto& entry : BaseForms::g_List) {
-			if (!BaseForms::MatchesCategory(entry.typeID, category))
+			if (!BaseForms::MatchesCategory(entry.type, category))
 				continue;
 
 			const char* s = entry.editorID.c_str();
@@ -915,6 +570,22 @@ namespace Autocomplete {
 		g_Matches = std::move(prefixMatches);
 		g_Matches.insert(g_Matches.end(), substringMatches.begin(), substringMatches.end());
 		if (!g_Matches.empty()) g_MatchIndex = 0;
+	}
+
+	void FindQuestVariables(const char* questEditorID, const char* prefix) {
+		g_Matches.clear();
+		g_MatchIndex = -1;
+		if (!questEditorID || !*questEditorID) return;
+
+		std::vector<std::string> varNames;
+		CollectQuestVars(questEditorID, varNames);
+		if (varNames.empty()) return;
+
+		std::sort(varNames.begin(), varNames.end(), [](const std::string& a, const std::string& b) {
+			return _stricmp(a.c_str(), b.c_str()) < 0;
+		});
+
+		FindInList(varNames, prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
 	void FindObjectives(const char* questID, const char* prefix) {
