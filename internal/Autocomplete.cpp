@@ -167,7 +167,6 @@ namespace Cells {
 
 		std::vector<std::string> temp;
 		Cache::BuildCellList(temp);
-		CollectEditorIDs(kFormType_Cell, temp);
 
 		std::sort(temp.begin(), temp.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
