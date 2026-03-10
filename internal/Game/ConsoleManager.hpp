@@ -56,7 +56,7 @@ inline String* GetDebugInput() {
 	if (!dt) return nullptr;
 	DebugLine* result = &dt->kLines[0];
 	for (UInt32 i = 1; i < kDebugTextLineCount; i++) {
-		if (!dt->kLines[i].strText.m_data) break;
+		if (!dt->kLines[i].strText.m_data) continue;
 		if (dt->kLines[i].fOffsetY > result->fOffsetY)
 			result = &dt->kLines[i];
 	}

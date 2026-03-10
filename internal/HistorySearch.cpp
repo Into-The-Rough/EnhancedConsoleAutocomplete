@@ -1,4 +1,5 @@
 #include "HistorySearch.hpp"
+#include "Utils.hpp"
 #include "Game/ConsoleManager.hpp"
 #include <vector>
 #include <cstring>
@@ -44,7 +45,7 @@ static void FindMatches() {
 
 		char buf[256];
 		strncpy_s(buf, node->text.m_data, _TRUNCATE);
-		if (char* cursor = strchr(buf, '|')) memmove(cursor, cursor + 1, strlen(cursor));
+		StripCursor(buf);
 
 		if (!sQuery.empty() && !_stristr(buf, sQuery.c_str())) continue;
 
@@ -62,7 +63,7 @@ void Enter(const char* input) {
 	sOriginal = input ? input : "";
 	char buf[256];
 	strncpy_s(buf, sOriginal.c_str(), _TRUNCATE);
-	if (char* p = strchr(buf, '|')) memmove(p, p + 1, strlen(p));
+	StripCursor(buf);
 	sQuery = buf;
 	FindMatches();
 }

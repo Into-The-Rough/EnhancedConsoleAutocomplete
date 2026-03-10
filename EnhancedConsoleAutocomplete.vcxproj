@@ -104,7 +104,7 @@
     <PostBuildEvent>
       <Message>Installing DLL...</Message>
       <Command>copy /Y "$(TargetPath)" "D:\Modding\VNV\mods\Enhanced Console Autocomplete\NVSE\Plugins\$(TargetFileName)"
-if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb" "D:\Modding\VNV\mods\Enhanced Console Autocomplete\NVSE\Plugins\$(TargetName).pdb"</Command>
+copy /Y "$(TargetDir)$(TargetName).pdb" "D:\Modding\VNV\mods\Enhanced Console Autocomplete\NVSE\Plugins\$(TargetName).pdb"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -114,6 +114,7 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClCompile Include="main.cpp" />
     <ClCompile Include="internal\Cache.cpp" />
     <ClCompile Include="internal\Autocomplete.cpp" />
+    <ClCompile Include="internal\GameData.cpp" />
     <ClCompile Include="internal\HistorySearch.cpp" />
     <ClCompile Include="internal\CommandParser.cpp" />
     <ClCompile Include="internal\Hooks.cpp" />
@@ -121,6 +122,8 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
   <ItemGroup>
     <ClInclude Include="internal\Cache.hpp" />
     <ClInclude Include="internal\Autocomplete.hpp" />
+    <ClInclude Include="internal\GameData.hpp" />
+    <ClInclude Include="internal\Utils.hpp" />
     <ClInclude Include="internal\HistorySearch.hpp" />
     <ClInclude Include="internal\CommandParser.hpp" />
     <ClInclude Include="internal\Hooks.hpp" />
@@ -128,7 +131,6 @@ if exist "$(TargetDir)$(TargetName).pdb" copy /Y "$(TargetDir)$(TargetName).pdb"
     <ClInclude Include="internal\Game\Forms.hpp" />
     <ClInclude Include="internal\Game\ConsoleManager.hpp" />
     <ClInclude Include="internal\Game\NVSEInterfaces.hpp" />
-    <ClInclude Include="internal\Game\NiTypes.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -53,7 +53,7 @@ static void ParsePlugin(const char* path) {
 		//extract EDID from uncompressed records
 		if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) {
 			size_t subPos = dataStart;
-			while (subPos + sizeof(SubrecordHeader) < dataEnd) {
+			while (subPos + sizeof(SubrecordHeader) <= dataEnd) {
 				auto* sub = (const SubrecordHeader*)(data + subPos);
 				size_t subDataStart = subPos + sizeof(SubrecordHeader);
 				if (subDataStart + sub->dataSize > dataEnd) break;
@@ -80,6 +80,22 @@ static void ParsePlugin(const char* path) {
 	CloseHandle(hFile);
 }
 
+struct ModInfo {
+	UInt8 pad00[0x20];
+	char name[0x104];
+};
+
+struct ModList {
+	UInt8 pad00[0x08];
+	UInt32 loadedModCount;
+	ModInfo* loadedMods[0xFF];
+};
+
+struct DataHandler {
+	UInt8 pad000[0x210];
+	ModList modList;
+};
+
 void Build() {
 	if (g_Built) return;
 
@@ -88,19 +104,31 @@ void Build() {
 	if (char* p = strrchr(dataPath, '\\')) *p = '\0';
 	strcat_s(dataPath, "\\Data\\");
 
-	WIN32_FIND_DATAA fd;
-	char searchPath[MAX_PATH];
-
-	for (const char* ext : { "*.esm", "*.esp" }) {
-		sprintf_s(searchPath, "%s%s", dataPath, ext);
-		HANDLE hFind = FindFirstFileA(searchPath, &fd);
-		if (hFind != INVALID_HANDLE_VALUE) {
-			do {
-				char fullPath[MAX_PATH];
-				sprintf_s(fullPath, "%s%s", dataPath, fd.cFileName);
-				ParsePlugin(fullPath);
-			} while (FindNextFileA(hFind, &fd));
-			FindClose(hFind);
+	auto* dh = *(DataHandler**)0x11C3F2C;
+	if (dh) {
+		//iterate active plugins in load order
+		for (UInt32 i = 0; i < dh->modList.loadedModCount && i < 0xFF; i++) {
+			auto* mod = dh->modList.loadedMods[i];
+			if (!mod || !mod->name[0]) continue;
+			char fullPath[MAX_PATH];
+			sprintf_s(fullPath, "%s%s", dataPath, mod->name);
+			ParsePlugin(fullPath);
+		}
+	} else {
+		//fallback if called before DataHandler init
+		WIN32_FIND_DATAA fd;
+		char searchPath[MAX_PATH];
+		for (const char* ext : { "*.esm", "*.esp" }) {
+			sprintf_s(searchPath, "%s%s", dataPath, ext);
+			HANDLE hFind = FindFirstFileA(searchPath, &fd);
+			if (hFind != INVALID_HANDLE_VALUE) {
+				do {
+					char fullPath[MAX_PATH];
+					sprintf_s(fullPath, "%s%s", dataPath, fd.cFileName);
+					ParsePlugin(fullPath);
+				} while (FindNextFileA(hFind, &fd));
+				FindClose(hFind);
+			}
 		}
 	}
 

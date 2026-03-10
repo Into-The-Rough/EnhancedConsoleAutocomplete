@@ -1,10 +1,7 @@
 #include "CommandParser.hpp"
-#include "Game/NVSEInterfaces.hpp"
+#include "GameData.hpp"
 #include <cstring>
 #include <cctype>
-
-extern NVSECommandTableInterface* GetCommandTable();
-extern const CommandInfo* GetCommandInfoByName(const char* name);
 
 enum ParamType {
 	kParamType_String = 0x00,

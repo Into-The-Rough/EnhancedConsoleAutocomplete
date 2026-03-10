@@ -2,7 +2,7 @@
 #include "internal/Game/Types.hpp"
 #include "internal/Game/NVSEInterfaces.hpp"
 #include "internal/Hooks.hpp"
-#include "internal/Autocomplete.hpp"
+#include "internal/GameData.hpp"
 
 #define PLUGIN_NAME "Enhanced Console Autocomplete"
 #define PLUGIN_VERSION 1

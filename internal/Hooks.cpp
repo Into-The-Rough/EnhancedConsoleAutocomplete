@@ -1,8 +1,9 @@
 #include "Hooks.hpp"
-#include "Autocomplete.hpp"
+#include "GameData.hpp"
 #include "Cache.hpp"
 #include "HistorySearch.hpp"
 #include "CommandParser.hpp"
+#include "Utils.hpp"
 #include "Game/ConsoleManager.hpp"
 #include "Game/Types.hpp"
 #include <windows.h>
@@ -42,14 +43,17 @@ static void SafeWriteBuf(UInt32 addr, const void* data, UInt32 len) {
 	VirtualProtect((void*)addr, len, oldProtect, &oldProtect);
 }
 
+//DIHookControl: scancode * 7 + 4 = key held state
 static bool IsCtrlHeld() {
 	if (!g_DIHookCtrl) return false;
-	return *((UInt8*)g_DIHookCtrl + 0xCF) != 0 || *((UInt8*)g_DIHookCtrl + 0x44F) != 0;  // left and right ctrl
+	return *((UInt8*)g_DIHookCtrl + 0x1D * 7 + 4) != 0    //left ctrl
+		|| *((UInt8*)g_DIHookCtrl + 0x9D * 7 + 4) != 0;   //right ctrl
 }
 
 static bool IsShiftHeld() {
 	if (!g_DIHookCtrl) return false;
-	return *((UInt8*)g_DIHookCtrl + 0x2A * 7 + 4) != 0 || *((UInt8*)g_DIHookCtrl + 0x36 * 7 + 4) != 0;
+	return *((UInt8*)g_DIHookCtrl + 0x2A * 7 + 4) != 0    //left shift
+		|| *((UInt8*)g_DIHookCtrl + 0x36 * 7 + 4) != 0;   //right shift
 }
 
 static void BuildFullSuggestion(const char* cmdName) {
@@ -76,7 +80,7 @@ static void UpdateCommandSuggestion(const char* rawInput) {
 
 	char clean[256];
 	strncpy_s(clean, rawInput, _TRUNCATE);
-	if (char* c = strchr(clean, '|')) memmove(c, c + 1, strlen(c));
+	StripCursor(clean);
 	if (!*clean) {
 		g_CmdSuggestion.clear();
 		g_CmdSuggestionInput.clear();
@@ -150,10 +154,10 @@ static bool __fastcall HookHandler(ConsoleManager* mgr, void*, int key) {
 			if (input) {
 				char buf[256];
 				strncpy_s(buf, orig.c_str(), _TRUNCATE);
-				if (char* p = strchr(buf, '|')) memmove(p, p + 1, strlen(p));
+				StripCursor(buf);
 				input->Set(buf);
 			}
-			ThisCall<void>(0x71D410, mgr);
+			ThisCall<void>(0x71D410, mgr); //MenuConsole::RefreshLines
 			mgr->HandleInput(kSpclChar_RightArrow);
 			g_InHook = false;
 			return true;
@@ -190,7 +194,7 @@ static bool __fastcall HookHandler(ConsoleManager* mgr, void*, int key) {
 		if (input && input->m_data) {
 			char clean[256];
 			strncpy_s(clean, input->m_data, _TRUNCATE);
-			if (char* c = strchr(clean, '|')) memmove(c, c + 1, strlen(c));
+			StripCursor(clean);
 			if (clean[0] == '!') {
 				const char* expanded = Aliases::Lookup(clean + 1);
 				if (expanded)
@@ -208,7 +212,7 @@ static bool __fastcall HookHandler(ConsoleManager* mgr, void*, int key) {
 		if (input && input->m_data) {
 			char clean[256];
 			strncpy_s(clean, input->m_data, _TRUNCATE);
-			if (char* c = strchr(clean, '|')) memmove(c, c + 1, strlen(c));
+			StripCursor(clean);
 
 			auto cmd = ParseCommand(clean);
 			if (cmd.type != CommandType::None) {
@@ -347,6 +351,90 @@ static const char* GetTypeHint(CommandType type) {
 	}
 }
 
+static void RenderCommandHint(DebugText* debugText, const char* cleanInput,
+	float xPos, float suggestionY, int alignment, int a6, float duration, int fontNumber)
+{
+	auto renderPadded = [&](const char* text) {
+		char padded[128];
+		snprintf(padded, sizeof(padded), "%-100s", text);
+		ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY,
+			alignment, a6, duration, fontNumber, &g_GrayColor);
+	};
+
+	auto cmd = ParseCommand(cleanInput);
+
+	if (cmd.type == CommandType::ActorValue) {
+		bool showed = false;
+		if (cmd.arg && *cmd.arg) {
+			char avName[64];
+			const char* end = cmd.arg;
+			while (*end && !isspace((unsigned char)*end)) end++;
+			size_t len = end - cmd.arg;
+			if (len > 0 && len < sizeof(avName)) {
+				memcpy(avName, cmd.arg, len);
+				avName[len] = '\0';
+				UInt32 avCode = GetActorValueCode(avName);
+				if (avCode != 0xFFFFFFFF) {
+					bool isPlayer = _strnicmp(cleanInput, "player.", 7) == 0;
+					void* ref = isPlayer ? GetPlayerRef() : GetConsoleSelectedRef();
+					if (ref) {
+						float val = GetActorValueForRef(ref, avCode);
+						char valBuf[128];
+						snprintf(valBuf, sizeof(valBuf), "%s = %.2f", avName, val);
+						renderPadded(valBuf);
+						showed = true;
+					}
+				}
+			}
+		}
+		if (!showed)
+			renderPadded(g_CmdSuggestion.empty() ? "Press TAB to cycle actor values" : g_CmdSuggestion.c_str());
+	} else if (cmd.type == CommandType::GameSetting) {
+		bool showed = false;
+		if (cmd.arg && *cmd.arg) {
+			char nameBuf[128];
+			const char* end = cmd.arg;
+			while (*end && !isspace((unsigned char)*end)) end++;
+			size_t len = end - cmd.arg;
+			if (len > 0 && len < sizeof(nameBuf)) {
+				memcpy(nameBuf, cmd.arg, len);
+				nameBuf[len] = '\0';
+				Setting* s = LookupGameSetting(nameBuf);
+				if (s) {
+					char valBuf[256];
+					if (FormatSettingValue(s, valBuf, sizeof(valBuf))) {
+						renderPadded(valBuf);
+						showed = true;
+					}
+				}
+			}
+		}
+		if (!showed)
+			renderPadded(g_CmdSuggestion.empty() ? "Press TAB to cycle game settings" : g_CmdSuggestion.c_str());
+	} else if (cmd.type != CommandType::None && cmd.type != CommandType::CommandName
+	        && cmd.type != CommandType::QuestVariable && cmd.type != CommandType::Alias) {
+		if (!g_CmdSuggestion.empty()) {
+			renderPadded(g_CmdSuggestion.c_str());
+		} else {
+			const char* hint = GetTypeHint(cmd.type);
+			if (hint) {
+				char buf[64];
+				if (!Cache::IsBuilt())
+					snprintf(buf, sizeof(buf), "Press TAB to load %s...", hint);
+				else
+					snprintf(buf, sizeof(buf), "Press TAB to cycle %s", hint);
+				renderPadded(buf);
+			} else {
+				renderPadded("");
+			}
+		}
+	} else if (!g_CmdSuggestion.empty()) {
+		renderPadded(g_CmdSuggestion.c_str());
+	} else {
+		renderPadded("");
+	}
+}
+
 static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float xPos, float yPos, int alignment, int a6, float duration, int fontNumber, NiColorAlpha* color) {
 	ConsoleManager* mgr = ConsoleManager::GetSingleton();
 	ThisCall<void>(g_OriginalPrint, debugText, str, xPos, yPos, alignment, a6, duration, fontNumber, color);
@@ -366,7 +454,7 @@ static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float x
 
 		char cleanInput[256];
 		strncpy_s(cleanInput, str, _TRUNCATE);
-		if (char* c = strchr(cleanInput, '|')) memmove(c, c + 1, strlen(c));
+		StripCursor(cleanInput);
 
 		if (cleanInput[0] == '!') {
 			const char* aliasName = cleanInput + 1;
@@ -388,115 +476,36 @@ static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float x
 				ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
 			}
 		} else {
-
-		auto renderPadded = [&](const char* text) {
-			char padded[128];
-			snprintf(padded, sizeof(padded), "%-100s", text);
-			ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
-		};
-
-		auto cmd = ParseCommand(cleanInput);
-
-		if (cmd.type == CommandType::ActorValue) {
-			bool showed = false;
-			if (cmd.arg && *cmd.arg) {
-				char avName[64];
-				const char* end = cmd.arg;
-				while (*end && !isspace((unsigned char)*end)) end++;
-				size_t len = end - cmd.arg;
-				if (len > 0 && len < sizeof(avName)) {
-					memcpy(avName, cmd.arg, len);
-					avName[len] = '\0';
-					UInt32 avCode = GetActorValueCode(avName);
-					if (avCode != 0xFFFFFFFF) {
-						bool isPlayer = _strnicmp(cleanInput, "player.", 7) == 0;
-						void* ref = isPlayer ? GetPlayerRef() : GetConsoleSelectedRef();
-						if (ref) {
-							float val = GetActorValueForRef(ref, avCode);
-							char valBuf[128];
-							snprintf(valBuf, sizeof(valBuf), "%s = %.2f", avName, val);
-							renderPadded(valBuf);
-							showed = true;
-						}
-					}
-				}
-			}
-			if (!showed)
-				renderPadded(g_CmdSuggestion.empty() ? "Press TAB to cycle actor values" : g_CmdSuggestion.c_str());
-		} else if (cmd.type == CommandType::GameSetting) {
-			bool showed = false;
-			if (cmd.arg && *cmd.arg) {
-				char nameBuf[128];
-				const char* end = cmd.arg;
-				while (*end && !isspace((unsigned char)*end)) end++;
-				size_t len = end - cmd.arg;
-				if (len > 0 && len < sizeof(nameBuf)) {
-					memcpy(nameBuf, cmd.arg, len);
-					nameBuf[len] = '\0';
-					Setting* s = LookupGameSetting(nameBuf);
-					if (s) {
-						char valBuf[256];
-						if (FormatSettingValue(s, valBuf, sizeof(valBuf))) {
-							renderPadded(valBuf);
-							showed = true;
-						}
-					}
-				}
-			}
-			if (!showed)
-				renderPadded(g_CmdSuggestion.empty() ? "Press TAB to cycle game settings" : g_CmdSuggestion.c_str());
-		} else if (cmd.type != CommandType::None && cmd.type != CommandType::CommandName
-		        && cmd.type != CommandType::QuestVariable && cmd.type != CommandType::Alias) {
-			if (!g_CmdSuggestion.empty()) {
-				renderPadded(g_CmdSuggestion.c_str());
-			} else {
-				const char* hint = GetTypeHint(cmd.type);
-				if (hint) {
-					char buf[64];
-					if (!Cache::IsBuilt())
-						snprintf(buf, sizeof(buf), "Press TAB to load %s...", hint);
-					else
-						snprintf(buf, sizeof(buf), "Press TAB to cycle %s", hint);
-					renderPadded(buf);
-				} else {
-					renderPadded("");
-				}
-			}
-		} else if (!g_CmdSuggestion.empty()) {
-			renderPadded(g_CmdSuggestion.c_str());
-		} else {
-			renderPadded("");
+			RenderCommandHint(debugText, cleanInput, xPos, suggestionY, alignment, a6, duration, fontNumber);
 		}
+	}
 
-		}
+	int matchCount = Autocomplete::Count();
+	int matchIdx = Autocomplete::GetIndex();
+	if (g_MatchListSize > 0 && matchCount > 1 && matchIdx >= 0) {
+		int visible = (matchCount < g_MatchListSize) ? matchCount : g_MatchListSize;
+		int half = visible / 2;
+		int start = matchIdx - half;
+		if (start < 0) start = 0;
+		if (start + visible > matchCount) start = matchCount - visible;
 
-		int matchCount = Autocomplete::Count();
-		int matchIdx = Autocomplete::GetIndex();
-		if (g_MatchListSize > 0 && matchCount > 1 && matchIdx >= 0) {
-			int visible = (matchCount < g_MatchListSize) ? matchCount : g_MatchListSize;
-			int half = visible / 2;
-			int start = matchIdx - half;
-			if (start < 0) start = 0;
-			if (start + visible > matchCount) start = matchCount - visible;
+		float listX = CdeclCall<float>(0x715D40) * 0.55f;
+		NiColorAlpha selColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-			float listX = CdeclCall<float>(0x715D40) * 0.55f;
-			NiColorAlpha selColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+		char countLine[32];
+		snprintf(countLine, sizeof(countLine), "[%d/%d]", matchIdx + 1, matchCount);
+		float baseY = suggestionY - lh;
+		ThisCall<void>(kDebugTextPrint, debugText, countLine, listX, baseY, alignment, a6, duration, fontNumber, &g_GrayColor);
 
-			char countLine[32];
-			snprintf(countLine, sizeof(countLine), "[%d/%d]", matchIdx + 1, matchCount);
-			float baseY = suggestionY - lh;
-			ThisCall<void>(kDebugTextPrint, debugText, countLine, listX, baseY, alignment, a6, duration, fontNumber, &g_GrayColor);
-
-			for (int i = 0; i < visible; i++) {
-				int idx = start + i;
-				const char* m = Autocomplete::GetMatch(idx);
-				if (!m) break;
-				char line[128];
-				snprintf(line, sizeof(line), "%s %s", (idx == matchIdx) ? ">" : " ", m);
-				float lineY = baseY - lh * (i + 1);
-				NiColorAlpha* c = (idx == matchIdx) ? &selColor : &g_GrayColor;
-				ThisCall<void>(kDebugTextPrint, debugText, line, listX, lineY, alignment, a6, duration, fontNumber, c);
-			}
+		for (int i = 0; i < visible; i++) {
+			int idx = start + i;
+			const char* m = Autocomplete::GetMatch(idx);
+			if (!m) break;
+			char line[128];
+			snprintf(line, sizeof(line), "%s %s", (idx == matchIdx) ? ">" : " ", m);
+			float lineY = baseY - lh * (i + 1);
+			NiColorAlpha* c = (idx == matchIdx) ? &selColor : &g_GrayColor;
+			ThisCall<void>(kDebugTextPrint, debugText, line, listX, lineY, alignment, a6, duration, fontNumber, c);
 		}
 	}
 }
@@ -514,5 +523,11 @@ void InitHooks() {
 		WriteRelCall(0x71CF8B, (UInt32)HookPrint);
 	}
 
-	SafeWriteBuf(0x71D427, "\xA1\x00\x8D\x1D\x01\x8D\x50\x01\x8B\x4D\xE8\x90\x90\x90\x90", 15);
+	//patch RefreshLines to read iConsoleVisibleLines+1 directly instead of calling Setting::Int
+	//(patch from Basic Console Autocomplete by lStewieAl)
+	static const UInt8 expected[] = { 0xB9,0xFC,0x8C,0x1D,0x01,0xE8,0x9F,0x00,0xD2,0xFF,0x8B,0x4D,0xE8,0x8B,0x10 };
+	if (memcmp((void*)0x71D427, expected, 15) == 0)
+		SafeWriteBuf(0x71D427, "\xA1\x00\x8D\x1D\x01\x8D\x50\x01\x8B\x4D\xE8\x90\x90\x90\x90", 15);
+
+	FlushInstructionCache(GetCurrentProcess(), nullptr, 0);
 }
