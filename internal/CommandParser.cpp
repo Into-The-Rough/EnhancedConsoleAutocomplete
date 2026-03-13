@@ -199,11 +199,12 @@ CommandMatch ParseCommand(const char* s) {
 			}
 			result.cmdName = g_CmdNameBuf;
 			s = cmdStart + cmdLen;
-			goto found;
+			break;
 		}
 	}
 
-	if (_strnicmp(s, "coc ", 4) == 0) {
+	if (result.type != CommandType::None) {
+	} else if (_strnicmp(s, "coc ", 4) == 0) {
 		result.type = CommandType::Coc;
 		result.cmdName = CopyCmdName(s, 3);
 		s += 4;
@@ -276,7 +277,6 @@ CommandMatch ParseCommand(const char* s) {
 		result.cmdName = CopyCmdName(s, 14);
 		s += 15;
 	} else if (_strnicmp(s, "search ", 7) == 0) {
-		// Pattern: search "somestring" <formtype>
 		const char* afterSearch = s + 7;
 		while (*afterSearch && isspace(*afterSearch)) afterSearch++;
 
@@ -300,8 +300,6 @@ CommandMatch ParseCommand(const char* s) {
 			}
 		}
 	}
-
-found:
 
 	if (result.type != CommandType::None) {
 		while (*s && isspace(*s)) s++;
@@ -395,7 +393,6 @@ found:
 		}
 	}
 
-	//quest.variable: dot prefix with no command match
 	if (result.type == CommandType::None && refPrefix) {
 		static char questNameBuf[128];
 		size_t nameLen = refPrefixLen - 1; //strip the dot

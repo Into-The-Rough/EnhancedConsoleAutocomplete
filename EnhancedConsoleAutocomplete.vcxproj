@@ -130,6 +130,7 @@ copy /Y "$(TargetDir)$(TargetName).pdb" "D:\Modding\VNV\mods\Enhanced Console Au
     <ClInclude Include="internal\Game\Types.hpp" />
     <ClInclude Include="internal\Game\Forms.hpp" />
     <ClInclude Include="internal\Game\ConsoleManager.hpp" />
+    <ClInclude Include="internal\Game\InterfaceManager.hpp" />
     <ClInclude Include="internal\Game\NVSEInterfaces.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

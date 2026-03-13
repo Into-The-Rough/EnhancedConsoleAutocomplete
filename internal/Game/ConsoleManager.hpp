@@ -47,10 +47,17 @@ struct DebugText {
 	void* vtbl;
 	DebugLine kLines[kDebugTextLineCount];
 
+	enum TextAlign {
+		kLeftAligned = 1,
+		kCentered = 2,
+	};
+
 	static DebugText* GetSingleton() { return CdeclCall<DebugText*>(0xA0D9E0, true); }
+	void CreateLine(const char* buf, float xPos, float yPos, TextAlign alignment, int a6, float duration, int fontNumber, void* color = nullptr) {
+		ThisCall<void>(0xA0F8B0, this, buf, xPos, yPos, alignment, a6, duration, fontNumber, color);
+	}
 };
 
-//console input is whichever kLines entry has the highest fOffsetY
 inline String* GetDebugInput() {
 	DebugText* dt = DebugText::GetSingleton();
 	if (!dt) return nullptr;

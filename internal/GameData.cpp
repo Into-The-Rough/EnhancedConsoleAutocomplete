@@ -2,6 +2,7 @@
 #include "Cache.hpp"
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 #include <cctype>
 
 static constexpr UInt32 kActorValueMax = 76;
@@ -28,10 +29,9 @@ Setting* LookupGameSetting(const char* name) {
 	auto* coll = *g_GameSettingCollection;
 	if (!coll || !name || !*name) return nullptr;
 	auto& map = coll->settingMap;
-	//hash to correct bucket instead of scanning all
 	UInt32 hash = 0;
 	for (const char* p = name; *p; p++)
-		hash = hash * 31 + tolower((unsigned char)*p);
+		hash = tolower((unsigned char)*p) + 33 * hash;
 	UInt32 bucket = hash % map.numBuckets;
 	for (auto* e = map.buckets[bucket]; e; e = e->next) {
 		if (e->data && e->data->name && _stricmp(e->data->name, name) == 0)
@@ -180,7 +180,6 @@ const CommandInfo* GetCommandInfoByName(const char* name) {
 	if (!name || !*name || !g_CmdTable) return nullptr;
 	const CommandInfo* cmd = g_CmdTable->GetByName(name);
 	if (cmd) return cmd;
-	//GetByName doesn't check shortName
 	for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
 		if (c->shortName && _stricmp(c->shortName, name) == 0)
 			return c;
@@ -223,14 +222,14 @@ namespace CommandNames {
 	void Build() {
 		if (g_Built) return;
 		if (!g_CmdTable) return;
-		std::unordered_map<std::string, bool> seen;
+		std::unordered_set<std::string> seen;
 		for (auto* cmd = g_CmdTable->Start(); cmd < g_CmdTable->End(); cmd++) {
 			for (const char* name : { cmd->longName, cmd->shortName }) {
 				if (!name || !*name) continue;
 				std::string lower = name;
 				std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 				if (seen.find(lower) == seen.end()) {
-					seen[lower] = true;
+					seen.insert(lower);
 					g_List.push_back(name);
 				}
 			}
@@ -243,29 +242,24 @@ namespace CommandNames {
 }
 
 namespace FormTypes {
-	std::vector<const char*> g_List;
+	std::vector<std::string> g_List;
 	static bool g_Built = false;
 
-	static const char* g_AllFormTypes[] = {
-		"ACHR", "ACRE", "ACTI", "ADDN", "ALCH", "ALOC", "AMEF", "AMMO", "ANIO", "ARMA",
-		"ARMO", "ASPC", "AVIF", "BOOK", "BPTD", "CAMS", "CCRD", "CDCK", "CELL", "CHAL",
-		"CHIP", "CLAS", "CLMT", "CLOT", "CMNY", "COBJ", "CONT", "CPTH", "CREA", "CSNO",
-		"CSTY", "DEBR", "DEHY", "DIAL", "DOBJ", "DOOR", "ECZN", "EFSH", "ENCH", "EXPL",
-		"EYES", "FACT", "FLOR", "FLST", "FURN", "GLOB", "GMST", "GRAS", "GRUP", "HAIR",
-		"HDPT", "HUNG", "IDLE", "IDLM", "IMAD", "IMGS", "IMOD", "INFO", "INGR", "IPCT",
-		"IPDS", "KEYM", "LAND", "LGTM", "LIGH", "LSCR", "LSCT", "LTEX", "LVLC", "LVLI",
-		"LVLN", "LVSP", "MESG", "MGEF", "MICN", "MISC", "MSET", "MSTT", "MUSC", "NAVI",
-		"NAVM", "NONE", "NOTE", "PACK", "PBEA", "PCBE", "PERK", "PFLA", "PGRE", "PMIS",
-		"PROJ", "PWAT", "QUST", "RACE", "RADS", "RCCT", "RCPE", "REFR", "REGN", "REPU",
-		"RGDL", "SCOL", "SCPT", "SKIL", "SLPD", "SOUN", "SPEL", "STAT", "TACT", "TERM",
-		"TES4", "TLOD", "TOFT", "TREE", "TXST", "VTYP", "WATR", "WEAP", "WRLD", "WTHR",
-		nullptr
-	};
+	static auto* g_FormEnumString = (UInt8*)0x1187000;
 
 	void Build() {
 		if (g_Built) return;
-		for (const char** p = g_AllFormTypes; *p; ++p)
-			g_List.push_back(*p);
+		for (int i = 0; i < 121; i++) {
+			UInt32 code = *(UInt32*)(g_FormEnumString + i * 0xC + 0x8);
+			if (!code) continue;
+			char buf[5];
+			memcpy(buf, &code, 4);
+			buf[4] = '\0';
+			g_List.push_back(buf);
+		}
+		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
+			return _stricmp(a.c_str(), b.c_str()) < 0;
+		});
 		g_Built = true;
 	}
 }

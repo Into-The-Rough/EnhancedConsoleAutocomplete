@@ -2,6 +2,8 @@
 #include "Utils.hpp"
 #include "Game/ConsoleManager.hpp"
 #include <vector>
+#include <string>
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
 
@@ -23,15 +25,11 @@ void Reset() {
 	sOriginal.clear();
 }
 
-static const char* _stristr(const char* str, const char* substr) {
-	if (!*substr) return str;
-	for (; *str; str++) {
-		const char* s = str;
-		const char* sub = substr;
-		while (*s && *sub && (tolower(*s) == tolower(*sub))) { s++; sub++; }
-		if (!*sub) return str;
-	}
-	return NULL;
+static bool ContainsCI(const char* str, const std::string& substr) {
+	if (substr.empty()) return true;
+	std::string hay = str;
+	std::transform(hay.begin(), hay.end(), hay.begin(), ::tolower);
+	return hay.find(substr) != std::string::npos;
 }
 
 static void FindMatches() {
@@ -47,7 +45,7 @@ static void FindMatches() {
 		strncpy_s(buf, node->text.m_data, _TRUNCATE);
 		StripCursor(buf);
 
-		if (!sQuery.empty() && !_stristr(buf, sQuery.c_str())) continue;
+		if (!sQuery.empty() && !ContainsCI(buf, sQuery)) continue;
 
 		bool dupe = false;
 		for (auto& m : matches) {
@@ -65,6 +63,7 @@ void Enter(const char* input) {
 	strncpy_s(buf, sOriginal.c_str(), _TRUNCATE);
 	StripCursor(buf);
 	sQuery = buf;
+	std::transform(sQuery.begin(), sQuery.end(), sQuery.begin(), ::tolower);
 	FindMatches();
 }
 

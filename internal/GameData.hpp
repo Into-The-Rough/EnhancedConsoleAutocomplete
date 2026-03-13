@@ -27,7 +27,7 @@ namespace CommandNames {
 }
 
 namespace FormTypes {
-	extern std::vector<const char*> g_List;
+	extern std::vector<std::string> g_List;
 	void Build();
 }
 

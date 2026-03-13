@@ -58,7 +58,7 @@ namespace Autocomplete {
 	}
 
 	void FindFormTypes(const char* prefix) {
-		FindInList(FormTypes::g_List, prefix, [](const char* s) { return s; });
+		FindInList(FormTypes::g_List, prefix, [](const std::string& s) { return s.c_str(); });
 	}
 
 	void FindAliases(const char* prefix) {
@@ -66,37 +66,12 @@ namespace Autocomplete {
 	}
 
 	void FindBaseForms(const char* prefix, BaseFormCategory category) {
-		g_Matches.clear();
-		g_MatchIndex = -1;
-		if (!prefix) prefix = "";
-
-		std::string lower = prefix;
-		std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-
-		std::vector<std::string> prefixMatches, substringMatches;
+		std::vector<const char*> filtered;
 		for (const auto& entry : BaseForms::g_List) {
-			if (!BaseForms::MatchesCategory(entry.type, category))
-				continue;
-
-			const char* s = entry.editorID.c_str();
-			if (!*s) continue;
-
-			if (lower.empty()) {
-				prefixMatches.push_back(s);
-				continue;
-			}
-
-			std::string nameLower = s;
-			std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-
-			size_t pos = nameLower.find(lower);
-			if (pos == 0) prefixMatches.push_back(s);
-			else if (pos != std::string::npos) substringMatches.push_back(s);
+			if (BaseForms::MatchesCategory(entry.type, category) && !entry.editorID.empty())
+				filtered.push_back(entry.editorID.c_str());
 		}
-
-		g_Matches = std::move(prefixMatches);
-		g_Matches.insert(g_Matches.end(), substringMatches.begin(), substringMatches.end());
-		if (!g_Matches.empty()) g_MatchIndex = 0;
+		FindInList(filtered, prefix, [](const char* s) { return s; });
 	}
 
 	void FindQuestVariables(const char* questEditorID, const char* prefix) {

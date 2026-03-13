@@ -56,5 +56,3 @@ struct GameSettingCollection {
 };
 
 typedef char* (*_GetActorValueName)(UInt32 actorValueCode);
-
-TESForm* LookupFormByEditorID(const char* editorID);

@@ -50,7 +50,6 @@ static void ParsePlugin(const char* path) {
 
 		if (rec->dataSize > fileSize - pos - sizeof(RecordHeader)) break;
 
-		//extract EDID from uncompressed records
 		if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) {
 			size_t subPos = dataStart;
 			while (subPos + sizeof(SubrecordHeader) <= dataEnd) {
@@ -106,7 +105,6 @@ void Build() {
 
 	auto* dh = *(DataHandler**)0x11C3F2C;
 	if (dh) {
-		//iterate active plugins in load order
 		for (UInt32 i = 0; i < dh->modList.loadedModCount && i < 0xFF; i++) {
 			auto* mod = dh->modList.loadedMods[i];
 			if (!mod || !mod->name[0]) continue;
@@ -115,7 +113,6 @@ void Build() {
 			ParsePlugin(fullPath);
 		}
 	} else {
-		//fallback if called before DataHandler init
 		WIN32_FIND_DATAA fd;
 		char searchPath[MAX_PATH];
 		for (const char* ext : { "*.esm", "*.esp" }) {
