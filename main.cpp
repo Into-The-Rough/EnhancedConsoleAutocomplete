@@ -4,8 +4,8 @@
 #include "internal/Hooks.hpp"
 #include "internal/GameData.hpp"
 
-#define PLUGIN_NAME "Enhanced Console Autocomplete"
-#define PLUGIN_VERSION 1
+constexpr char const* PLUGIN_NAME = "Enhanced Console Autocomplete";
+constexpr UInt32 PLUGIN_VERSION = 1;
 
 int g_MatchListSize = 5;
 

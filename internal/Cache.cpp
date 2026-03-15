@@ -50,7 +50,7 @@ static void ParsePlugin(const char* path) {
 
 		if (rec->dataSize > fileSize - pos - sizeof(RecordHeader)) break;
 
-		if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) {
+		if (!(rec->flags & 0x00040000) && dataEnd <= fileSize) { //skip compressed records
 			size_t subPos = dataStart;
 			while (subPos + sizeof(SubrecordHeader) <= dataEnd) {
 				auto* sub = (const SubrecordHeader*)(data + subPos);

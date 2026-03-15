@@ -103,20 +103,20 @@ NVSECommandTableInterface* GetCommandTable() {
 
 const char* CommandTypeToRecordType(CommandType type) {
 	switch (type) {
-		case CommandType::Coc:                return "CELL";
-		case CommandType::Quest:              return "QUST";
-		case CommandType::Perk:               return "PERK";
-		case CommandType::Note:               return "NOTE";
-		case CommandType::Faction:            return "FACT";
-		case CommandType::Sound:              return "SOUN";
+		case CommandType::Coc: return "CELL";
+		case CommandType::Quest: return "QUST";
+		case CommandType::Perk: return "PERK";
+		case CommandType::Note: return "NOTE";
+		case CommandType::Faction: return "FACT";
+		case CommandType::Sound: return "SOUN";
 		case CommandType::ImageSpaceModifier: return "IMAD";
-		case CommandType::Weather:            return "WTHR";
-		case CommandType::WorldSpace:         return "WRLD";
-		case CommandType::Idle:               return "IDLE";
-		case CommandType::Music:              return "MUSC";
-		case CommandType::FormList:           return "FLST";
-		case CommandType::Spell:              return "SPEL";
-		default:                              return nullptr;
+		case CommandType::Weather: return "WTHR";
+		case CommandType::WorldSpace: return "WRLD";
+		case CommandType::Idle: return "IDLE";
+		case CommandType::Music: return "MUSC";
+		case CommandType::FormList: return "FLST";
+		case CommandType::Spell: return "SPEL";
+		default: return nullptr;
 	}
 }
 

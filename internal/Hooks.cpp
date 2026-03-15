@@ -27,8 +27,8 @@ enum {
 	kSpclChar_LeftArrow = 0x80000001,
 	kSpclChar_RightArrow = 0x80000002,
 	kSpclChar_Enter = 0x80000008,
+	kSpclChar_EnterAlt = 0x8000000D, //alternate enter encoding from console input
 };
-
 
 void SetDIHookCtrl(void* ctrl) {
 	g_DIHookCtrl = ctrl;
@@ -57,7 +57,6 @@ static bool CopyTextToClipboard(const char* text) {
 	CloseClipboard();
 	return true;
 }
-
 
 static void WriteRelCall(UInt32 addr, UInt32 dest) {
 	DWORD oldProtect;
@@ -225,7 +224,7 @@ static void UpdateCommandSuggestion(const char* rawInput) {
 }
 
 static bool HandleHistorySearch(ConsoleManager* mgr, int key) {
-	if (key == VK_TAB || key == VK_RETURN || key == 0x8000000D) {
+	if (key == VK_TAB || key == VK_RETURN || key == kSpclChar_EnterAlt) {
 		if (const char* match = HistorySearch::Current()) {
 			String* input = GetDebugInput();
 			if (input) {
@@ -428,26 +427,26 @@ static int GetPadWidth() {
 
 static const char* GetTypeHint(CommandType type) {
 	switch (type) {
-		case CommandType::Coc:                return "cells";
-		case CommandType::Quest:              return "quests";
-		case CommandType::QuestStage:         return "quest stages";
-		case CommandType::QuestObjective:     return "quest objectives";
-		case CommandType::Perk:               return "perks";
-		case CommandType::Note:               return "notes";
-		case CommandType::Faction:            return "factions";
-		case CommandType::Sound:              return "sounds";
+		case CommandType::Coc: return "cells";
+		case CommandType::Quest: return "quests";
+		case CommandType::QuestStage: return "quest stages";
+		case CommandType::QuestObjective: return "quest objectives";
+		case CommandType::Perk: return "perks";
+		case CommandType::Note: return "notes";
+		case CommandType::Faction: return "factions";
+		case CommandType::Sound: return "sounds";
 		case CommandType::ImageSpaceModifier: return "image space modifiers";
-		case CommandType::Weather:            return "weathers";
-		case CommandType::WorldSpace:         return "world spaces";
-		case CommandType::Idle:               return "idle animations";
-		case CommandType::Music:              return "music types";
-		case CommandType::FormList:           return "form lists";
-		case CommandType::Spell:              return "spells";
-		case CommandType::FormType:           return "form types";
-		case CommandType::InventoryItem:      return "items";
-		case CommandType::EquippableItem:     return "equippables";
-		case CommandType::PlaceableForm:      return "placeables";
-		default:                              return nullptr;
+		case CommandType::Weather: return "weathers";
+		case CommandType::WorldSpace: return "world spaces";
+		case CommandType::Idle: return "idle animations";
+		case CommandType::Music: return "music types";
+		case CommandType::FormList: return "form lists";
+		case CommandType::Spell: return "spells";
+		case CommandType::FormType: return "form types";
+		case CommandType::InventoryItem: return "items";
+		case CommandType::EquippableItem: return "equippables";
+		case CommandType::PlaceableForm: return "placeables";
+		default: return nullptr;
 	}
 }
 
