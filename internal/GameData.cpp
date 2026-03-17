@@ -90,7 +90,7 @@ float GetActorValueForRef(void* ref, UInt32 avCode) {
 
 TESForm* LookupFormByEditorID(const char* editorID) {
 	if (!editorID || !*editorID) return nullptr;
-	return CdeclCall<TESForm*>(0x483A1B, editorID);
+	return CdeclCall<TESForm*>(0x483A00, editorID);
 }
 
 void SetCommandTable(NVSECommandTableInterface* table) {
@@ -226,6 +226,8 @@ namespace CommandNames {
 		for (auto* cmd = g_CmdTable->Start(); cmd < g_CmdTable->End(); cmd++) {
 			for (const char* name : { cmd->longName, cmd->shortName }) {
 				if (!name || !*name) continue;
+				if (name[0] == '@') continue;
+				if (_stricmp(name, "NONE") == 0) continue;
 				std::string lower = name;
 				std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 				if (seen.find(lower) == seen.end()) {
@@ -255,6 +257,7 @@ namespace FormTypes {
 			char buf[5];
 			memcpy(buf, &code, 4);
 			buf[4] = '\0';
+			if (_stricmp(buf, "NONE") == 0) continue;
 			g_List.push_back(buf);
 		}
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {

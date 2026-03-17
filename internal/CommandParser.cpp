@@ -298,6 +298,20 @@ CommandMatch ParseCommand(const char* s) {
 				result.arg = afterQuote;
 				return result;
 			}
+		} else if (*afterSearch) {
+			const char* termEnd = afterSearch;
+			while (*termEnd && !isspace(*termEnd)) termEnd++;
+
+			result.type = CommandType::FormType;
+			static char searchCmdBuf[256];
+			int termLen = (int)(termEnd - afterSearch);
+			snprintf(searchCmdBuf, sizeof(searchCmdBuf), "search \"%.*s\"", termLen, afterSearch);
+			result.cmdName = searchCmdBuf;
+
+			const char* afterTerm = termEnd;
+			while (*afterTerm && isspace(*afterTerm)) afterTerm++;
+			result.arg = afterTerm;
+			return result;
 		}
 	}
 

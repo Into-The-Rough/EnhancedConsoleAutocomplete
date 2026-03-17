@@ -214,6 +214,12 @@ static void UpdateCommandSuggestion(const char* rawInput) {
 		return;
 	}
 
+	if (!*cmdPart) {
+		g_CmdSuggestion.clear();
+		g_CmdSuggestionInput.clear();
+		return;
+	}
+
 	g_CmdSuggestionInput = cmdPart;
 	CommandNames::Build();
 	Autocomplete::FindCommands(cmdPart);
