@@ -222,7 +222,8 @@ static void UpdateCommandSuggestion(const char* rawInput) {
 
 	g_CmdSuggestionInput = cmdPart;
 	CommandNames::Build();
-	Autocomplete::FindCommands(cmdPart);
+	bool hasRef = (dot != nullptr) || GetConsoleSelectedRef();
+	Autocomplete::FindCommands(cmdPart, hasRef);
 	if (const char* match = Autocomplete::Current())
 		BuildFullSuggestion(match);
 	else
@@ -256,7 +257,10 @@ static bool HandleHistorySearch(ConsoleManager* mgr, int key) {
 		return true;
 	}
 	if (IsCtrlHeld() && (key == 'r' || key == 'R')) {
-		HistorySearch::Next();
+		if (IsShiftHeld())
+			HistorySearch::Prev();
+		else
+			HistorySearch::Next();
 		if (const char* match = HistorySearch::Current()) {
 			String* input = GetDebugInput();
 			if (input) {
@@ -334,7 +338,8 @@ static bool HandleTab(ConsoleManager* mgr) {
 			Autocomplete::FindBaseForms(cmd.arg, BaseFormCategory::Placeable);
 		} else if (cmd.type == CommandType::CommandName) {
 			CommandNames::Build();
-			Autocomplete::FindCommands(cmd.arg);
+			bool hasRef = (cmd.cmdName && strchr(cmd.cmdName, '.')) || GetConsoleSelectedRef();
+			Autocomplete::FindCommands(cmd.arg, hasRef);
 			if (Autocomplete::Count() == 0 && cmd.cmdName && strchr(cmd.cmdName, '.')) {
 				static char qBuf[128];
 				strncpy_s(qBuf, cmd.cmdName, _TRUNCATE);
@@ -355,10 +360,15 @@ static bool HandleTab(ConsoleManager* mgr) {
 		} else if (cmd.type == CommandType::CommandName) {
 			if (cmd.cmdName)
 				snprintf(newCmd, sizeof(newCmd), "%s%s", cmd.cmdName, match);
-			else
+			else if (_stricmp(match, "player") == 0) {
+				snprintf(newCmd, sizeof(newCmd), "player.");
+				g_CmdSuggestion.clear();
+				g_CmdSuggestionInput.clear();
+			} else {
 				snprintf(newCmd, sizeof(newCmd), "%s", match);
-			g_CmdSuggestionInput = match;
-			BuildFullSuggestion(match);
+				g_CmdSuggestionInput = match;
+				BuildFullSuggestion(match);
+			}
 		} else if (cmd.type == CommandType::QuestVariable) {
 			snprintf(newCmd, sizeof(newCmd), "%s.%s", cmd.cmdName, match);
 		} else if ((cmd.type == CommandType::QuestObjective || cmd.type == CommandType::QuestStage) && cmd.arg2 != nullptr) {

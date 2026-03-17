@@ -19,7 +19,7 @@ namespace Autocomplete {
 	void FindForms(const char* type4, const char* prefix);
 	void FindSettings(const char* prefix);
 	void FindActorValues(const char* prefix);
-	void FindCommands(const char* prefix);
+	void FindCommands(const char* prefix, bool hasRef = false);
 	void FindFormTypes(const char* prefix);
 	void FindAliases(const char* prefix);
 	void FindBaseForms(const char* prefix, BaseFormCategory category);

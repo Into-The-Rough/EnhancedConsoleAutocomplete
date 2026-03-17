@@ -71,6 +71,10 @@ void Next() {
 	if (!matches.empty()) idx = (idx + 1) % matches.size();
 }
 
+void Prev() {
+	if (!matches.empty()) idx = (idx - 1 + (int)matches.size()) % (int)matches.size();
+}
+
 const char* Current() {
 	return (idx >= 0 && idx < (int)matches.size()) ? matches[idx].c_str() : NULL;
 }

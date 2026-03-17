@@ -116,6 +116,7 @@ static const RefCommand g_RefCommands[] = {
 	{ "modactorvalue ", CommandType::ActorValue },
 	{ "forceav ", CommandType::ActorValue },
 	{ "forceactorvalue ", CommandType::ActorValue },
+	{ "getavinfo ", CommandType::ActorValue },
 	{ "addperk ", CommandType::Perk },
 	{ "removeperk ", CommandType::Perk },
 	{ "hasperk ", CommandType::Perk },
