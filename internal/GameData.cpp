@@ -1,5 +1,6 @@
 #include "GameData.hpp"
 #include "Cache.hpp"
+#include "../../CustomActorValuesNVSE/include/CustomActorValuesAPI.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,6 +13,58 @@ static auto** g_GameSettingCollection = reinterpret_cast<GameSettingCollection**
 static const _GetActorValueName GetActorValueName = (_GetActorValueName)0x66EAC0;
 
 static NVSECommandTableInterface* g_CmdTable = nullptr;
+static const CustomActorValuesInterfaceV1* g_CustomActorValuesV1 = nullptr;
+static const CustomActorValuesInterfaceV2* g_CustomActorValuesV2 = nullptr;
+
+static void ResolveCustomActorValuesInterfaces() {
+	if (g_CustomActorValuesV1 && g_CustomActorValuesV2)
+		return;
+
+	auto module = GetModuleHandleA("CustomActorValuesNVSE.dll");
+	if (!module)
+		return;
+
+	auto getInterface = reinterpret_cast<CustomActorValues_GetInterfaceFn>(
+		GetProcAddress(module, "CustomActorValues_GetInterface"));
+	if (!getInterface)
+		return;
+
+	if (!g_CustomActorValuesV2) {
+		auto* api = reinterpret_cast<const CustomActorValuesInterfaceV2*>(
+			getInterface(kCustomActorValuesInterfaceVersion2));
+		if (api && api->interfaceVersion == kCustomActorValuesInterfaceVersion2)
+			g_CustomActorValuesV2 = api;
+	}
+
+	if (!g_CustomActorValuesV1) {
+		auto* api = getInterface(kCustomActorValuesInterfaceVersion1);
+		if (api && api->interfaceVersion == kCustomActorValuesInterfaceVersion1)
+			g_CustomActorValuesV1 = api;
+	}
+}
+
+static const CustomActorValuesInterfaceV1* GetCustomActorValuesV1() {
+	ResolveCustomActorValuesInterfaces();
+	return g_CustomActorValuesV1;
+}
+
+static const CustomActorValuesInterfaceV2* GetCustomActorValuesV2() {
+	ResolveCustomActorValuesInterfaces();
+	return g_CustomActorValuesV2;
+}
+
+static void PushActorValueNameUnique(std::vector<std::string>& out, std::unordered_set<std::string>& seen, const char* name) {
+	if (!name || !*name)
+		return;
+
+	std::string lower = name;
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+		return static_cast<char>(std::tolower(ch));
+	});
+
+	if (seen.insert(lower).second)
+		out.emplace_back(name);
+}
 
 static void CollectSettings(std::vector<std::string>& out) {
 	auto* coll = *g_GameSettingCollection;
@@ -63,6 +116,13 @@ UInt32 GetActorValueCode(const char* name) {
 		if (avName && _stricmp(avName, name) == 0)
 			return i;
 	}
+	if (const auto* api = GetCustomActorValuesV1()) {
+		if (api->ResolveByName) {
+			UInt32 avCode = api->ResolveByName(name);
+			if (avCode != 0)
+				return avCode;
+		}
+	}
 	return 0xFFFFFFFF;
 }
 
@@ -80,6 +140,10 @@ float GetActorValueForRef(void* ref, UInt32 avCode) {
 	if (!ref) return 0;
 	UInt8 typeID = ((TESForm*)ref)->typeID;
 	if (typeID != kFormType_ACHR && typeID != kFormType_ACRE) return 0;
+	if (const auto* api = GetCustomActorValuesV1()) {
+		if (api->IsCustom && api->IsCustom(avCode) && api->GetValue)
+			return api->GetValue(reinterpret_cast<Actor*>(ref), avCode);
+	}
 	void* avOwner = (void*)((UInt8*)ref + 0xA4);
 	void** vtbl = *(void***)avOwner;
 	if (!vtbl) return 0;
@@ -164,10 +228,21 @@ namespace ActorValues {
 
 	void Build() {
 		if (g_Built) return;
+		std::unordered_set<std::string> seen;
 		for (UInt32 i = 0; i <= kActorValueMax; i++) {
 			char* name = GetActorValueName(i);
-			if (name && *name)
-				g_List.push_back(std::string(name));
+			PushActorValueNameUnique(g_List, seen, name);
+		}
+		if (const auto* api = GetCustomActorValuesV2()) {
+			if (api->GetCustomCount && api->GetCustomCodeByIndex && api->GetName) {
+				UInt32 count = api->GetCustomCount();
+				for (UInt32 i = 0; i < count; i++) {
+					UInt32 avCode = api->GetCustomCodeByIndex(i);
+					if (avCode == 0)
+						continue;
+					PushActorValueNameUnique(g_List, seen, api->GetName(avCode));
+				}
+			}
 		}
 		std::sort(g_List.begin(), g_List.end(), [](const std::string& a, const std::string& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
