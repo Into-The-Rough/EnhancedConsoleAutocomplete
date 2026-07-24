@@ -366,11 +366,12 @@ namespace BaseForms {
 		return eq4(t, "WEAP") || eq4(t, "ARMO") || eq4(t, "AMMO") ||
 		       eq4(t, "ALCH") || eq4(t, "MISC") || eq4(t, "NOTE") ||
 		       eq4(t, "KEYM") || eq4(t, "BOOK") || eq4(t, "IMOD") ||
-		       eq4(t, "CHIP") || eq4(t, "CMNY") || eq4(t, "CCRD");
+		       eq4(t, "CHIP") || eq4(t, "CMNY") || eq4(t, "CCRD") ||
+		       eq4(t, "FLST") || eq4(t, "LVLI");
 	}
 
 	static bool IsEquippableType(const char* t) {
-		return eq4(t, "WEAP") || eq4(t, "ARMO");
+		return eq4(t, "WEAP") || eq4(t, "ARMO") || eq4(t, "FLST");
 	}
 
 	static bool IsPlaceableType(const char* t) {
@@ -382,7 +383,7 @@ namespace BaseForms {
 		       eq4(t, "TREE") || eq4(t, "NOTE") || eq4(t, "KEYM") ||
 		       eq4(t, "BOOK") || eq4(t, "TACT") || eq4(t, "TERM") ||
 		       eq4(t, "PROJ") || eq4(t, "LVLI") || eq4(t, "LVLC") ||
-		       eq4(t, "LVLN");
+		       eq4(t, "LVLN") || eq4(t, "FLST");
 	}
 
 	bool MatchesCategory(const char* type, BaseFormCategory category) {
