@@ -56,7 +56,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\JohnnyGuitarNVSE;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;RUNTIME_VERSION=0x040020D0;RUNTIME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -121,6 +121,7 @@ copy /Y "$(TargetDir)$(TargetName).pdb" "D:\Modding\VNV\mods\Enhanced Console Au
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="internal\Cache.hpp" />
+    <ClInclude Include="internal\CustomActorValuesAPI.h" />
     <ClInclude Include="internal\Autocomplete.hpp" />
     <ClInclude Include="internal\GameData.hpp" />
     <ClInclude Include="internal\Utils.hpp" />

@@ -74,7 +74,6 @@ static void SafeWriteBuf(UInt32 addr, const void* data, UInt32 len) {
 }
 
 struct NiColorAlpha { float r, g, b, a; };
-static const UInt32 kDebugTextPrint = 0xA0F8B0;
 
 static bool IsShiftHeld();
 
@@ -128,9 +127,10 @@ static bool __fastcall HookGetMouseButton(void* inputGlobals, void*, int button,
 				snprintf(msg, sizeof(msg), "Copied %s to clipboard", hexID);
 			}
 
-			void* conSingleton = *(void**)0x11D8CE8;
-			if (conSingleton && *msg)
-				ThisCall<void>(0x71D0A0, conSingleton, msg);
+			if (*msg) {
+				const char* arg = msg;
+				ThisCall<void>(0x71D0A0, mgr, "%s", &arg); //Print(fmt, va_list)
+			}
 		}
 	}
 	g_RightClickWasDown = rmbPressed;
@@ -472,8 +472,7 @@ static void RenderCommandHint(DebugText* debugText, const char* cleanInput,
 	auto renderPadded = [&](const char* text) {
 		char padded[256];
 		snprintf(padded, sizeof(padded), "%-*s", GetPadWidth(), text);
-		ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY,
-			alignment, a6, duration, fontNumber, &g_GrayColor);
+		debugText->CreateLine(padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
 	};
 
 	auto cmd = ParseCommand(cleanInput);
@@ -569,7 +568,7 @@ static void RenderMatchList(DebugText* debugText, float suggestionY,
 	char countLine[32];
 	snprintf(countLine, sizeof(countLine), "[%d/%d]", matchIdx + 1, matchCount);
 	float baseY = suggestionY - lh;
-	ThisCall<void>(kDebugTextPrint, debugText, countLine, listX, baseY, alignment, a6, duration, fontNumber, &g_GrayColor);
+	debugText->CreateLine(countLine, listX, baseY, alignment, a6, duration, fontNumber, &g_GrayColor);
 
 	for (int i = 0; i < visible; i++) {
 		int idx = start + i;
@@ -579,7 +578,7 @@ static void RenderMatchList(DebugText* debugText, float suggestionY,
 		snprintf(line, sizeof(line), "%s %s", (idx == matchIdx) ? ">" : " ", m);
 		float lineY = baseY - lh * (i + 1);
 		NiColorAlpha* c = (idx == matchIdx) ? &selColor : &g_GrayColor;
-		ThisCall<void>(kDebugTextPrint, debugText, line, listX, lineY, alignment, a6, duration, fontNumber, c);
+		debugText->CreateLine(line, listX, lineY, alignment, a6, duration, fontNumber, c);
 	}
 }
 
@@ -596,7 +595,7 @@ static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float x
 		char prompt[256];
 		HistorySearch::GetPrompt(prompt, sizeof(prompt));
 		NiColorAlpha col = { 0.7f, 0.9f, 1.0f, 1.0f };
-		ThisCall<void>(kDebugTextPrint, debugText, prompt, xPos, suggestionY, alignment, a6, duration, fontNumber, &col);
+		debugText->CreateLine(prompt, xPos, suggestionY, alignment, a6, duration, fontNumber, &col);
 	} else {
 		UpdateCommandSuggestion(str);
 
@@ -614,15 +613,15 @@ static void __fastcall HookPrint(DebugText* debugText, void*, char* str, float x
 				NiColorAlpha aliasCol = { 0.5f, 1.0f, 0.5f, 0.9f };
 				char padded[256];
 				snprintf(padded, sizeof(padded), "%-*s", pad, hint);
-				ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &aliasCol);
+				debugText->CreateLine(padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &aliasCol);
 			} else if (*aliasName) {
 				char padded[256];
 				snprintf(padded, sizeof(padded), "%-*s", pad, "Press TAB to cycle aliases");
-				ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
+				debugText->CreateLine(padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
 			} else {
 				char padded[256];
 				snprintf(padded, sizeof(padded), "%-*s", pad, "Type alias name (TAB to cycle)");
-				ThisCall<void>(kDebugTextPrint, debugText, padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
+				debugText->CreateLine(padded, xPos, suggestionY, alignment, a6, duration, fontNumber, &g_GrayColor);
 			}
 		} else {
 			RenderCommandHint(debugText, cleanInput, xPos, suggestionY, alignment, a6, duration, fontNumber);

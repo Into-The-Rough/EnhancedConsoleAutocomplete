@@ -53,19 +53,20 @@ struct DebugText {
 	};
 
 	static DebugText* GetSingleton() { return CdeclCall<DebugText*>(0xA0D9E0, true); }
-	void CreateLine(const char* buf, float xPos, float yPos, TextAlign alignment, int a6, float duration, int fontNumber, void* color = nullptr) {
+	void CreateLine(const char* buf, float xPos, float yPos, int alignment, int a6, float duration, int fontNumber, void* color = nullptr) {
 		ThisCall<void>(0xA0F8B0, this, buf, xPos, yPos, alignment, a6, duration, fontNumber, color);
 	}
 };
 
+//the input line is the text line with the largest y offset
 inline String* GetDebugInput() {
 	DebugText* dt = DebugText::GetSingleton();
 	if (!dt) return nullptr;
-	DebugLine* result = &dt->kLines[0];
-	for (UInt32 i = 1; i < kDebugTextLineCount; i++) {
+	DebugLine* result = nullptr;
+	for (UInt32 i = 0; i < kDebugTextLineCount; i++) {
 		if (!dt->kLines[i].strText.m_data) continue;
-		if (dt->kLines[i].fOffsetY > result->fOffsetY)
+		if (!result || dt->kLines[i].fOffsetY > result->fOffsetY)
 			result = &dt->kLines[i];
 	}
-	return &result->strText;
+	return result ? &result->strText : nullptr;
 }

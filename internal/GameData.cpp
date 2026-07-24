@@ -1,6 +1,7 @@
 #include "GameData.hpp"
 #include "Cache.hpp"
-#include "../../CustomActorValuesNVSE/include/CustomActorValuesAPI.h"
+#include "Game/InterfaceManager.hpp"
+#include "CustomActorValuesAPI.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -81,15 +82,9 @@ static void CollectSettings(std::vector<std::string>& out) {
 Setting* LookupGameSetting(const char* name) {
 	auto* coll = *g_GameSettingCollection;
 	if (!coll || !name || !*name) return nullptr;
-	auto& map = coll->settingMap;
-	UInt32 hash = 0;
-	for (const char* p = name; *p; p++)
-		hash = tolower((unsigned char)*p) + 33 * hash;
-	UInt32 bucket = hash % map.numBuckets;
-	for (auto* e = map.buckets[bucket]; e; e = e->next) {
-		if (e->data && e->data->name && _stricmp(e->data->name, name) == 0)
-			return e->data;
-	}
+	Setting* out = nullptr;
+	if (ThisCall<bool>(0x853130, &coll->settingMap, name, &out)) //NiTMap::Lookup
+		return out;
 	return nullptr;
 }
 
@@ -127,9 +122,8 @@ UInt32 GetActorValueCode(const char* name) {
 }
 
 void* GetConsoleSelectedRef() {
-	void* im = *(void**)0x11D8A80;
-	if (!im) return nullptr;
-	return *(void**)((UInt8*)im + 0xF0);
+	InterfaceManager* im = InterfaceManager::GetSingleton();
+	return im ? im->debugSelection : nullptr;
 }
 
 void* GetPlayerRef() {
@@ -253,13 +247,25 @@ namespace ActorValues {
 
 const CommandInfo* GetCommandInfoByName(const char* name) {
 	if (!name || !*name || !g_CmdTable) return nullptr;
+
+	//the hint renderer resolves the same name every console frame
+	static char lastName[128];
+	static const CommandInfo* lastResult;
+	if (lastName[0] && _stricmp(lastName, name) == 0)
+		return lastResult;
+
 	const CommandInfo* cmd = g_CmdTable->GetByName(name);
-	if (cmd) return cmd;
-	for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
-		if (c->shortName && _stricmp(c->shortName, name) == 0)
-			return c;
+	if (!cmd) {
+		for (auto* c = g_CmdTable->Start(); c < g_CmdTable->End(); c++) {
+			if (c->shortName && _stricmp(c->shortName, name) == 0) {
+				cmd = c;
+				break;
+			}
+		}
 	}
-	return nullptr;
+	strncpy_s(lastName, name, _TRUNCATE);
+	lastResult = cmd;
+	return cmd;
 }
 
 static bool ReadParamInfo(const CommandInfo* cmd, int index, const char** outTypeStr, bool* outOptional) {

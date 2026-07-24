@@ -5,7 +5,7 @@
 #include "internal/GameData.hpp"
 
 constexpr char const* PLUGIN_NAME = "Enhanced Console Autocomplete";
-constexpr UInt32 PLUGIN_VERSION = 1;
+constexpr UInt32 PLUGIN_VERSION = 2;
 
 int g_MatchListSize = 5;
 

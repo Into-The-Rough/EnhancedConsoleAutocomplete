@@ -1,19 +1,10 @@
 #pragma once
 #include "Types.hpp"
 
-constexpr UInt8 kFormType_GMST = 3;
-constexpr UInt8 kFormType_GLOB = 6;
-constexpr UInt8 kFormType_Cell = 57;
 constexpr UInt8 kFormType_REFR = 58;
 constexpr UInt8 kFormType_ACHR = 59;
 constexpr UInt8 kFormType_ACRE = 60;
-constexpr UInt8 kFormType_LAND = 66;
-constexpr UInt8 kFormType_NAVM = 67;
-constexpr UInt8 kFormType_NAVI = 68;
-constexpr UInt8 kFormType_DIAL = 69;
-constexpr UInt8 kFormType_INFO = 70;
 constexpr UInt8 kFormType_Quest = 71;
-constexpr UInt8 kFormType_BGSPerk = 105;
 
 struct TESForm {
 	void* vtbl;
