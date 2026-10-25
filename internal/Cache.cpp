@@ -84,10 +84,13 @@ struct ModInfo {
 	char name[0x104];
 };
 
+struct ModListList {
+	ModInfo* mod;
+	ModListList* next;
+};
+
 struct ModList {
-	UInt8 pad00[0x08];
-	UInt32 loadedModCount;
-	ModInfo* loadedMods[0xFF];
+	ModListList allFiles;
 };
 
 struct DataHandler {
@@ -105,8 +108,8 @@ void Build() {
 
 	auto* dh = *(DataHandler**)0x11C3F2C;
 	if (dh) {
-		for (UInt32 i = 0; i < dh->modList.loadedModCount && i < 0xFF; i++) {
-			auto* mod = dh->modList.loadedMods[i];
+		for (ModListList* i = &dh->modList.allFiles; i; i = i->next) {
+			auto* mod = i->mod;
 			if (!mod || !mod->name[0]) continue;
 			char fullPath[MAX_PATH];
 			sprintf_s(fullPath, "%s%s", dataPath, mod->name);
