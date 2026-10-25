@@ -1,9 +1,9 @@
 #pragma once
 #include <vector>
-#include <string>
+#include "Game/Types.hpp"
 
 struct CachedForm {
-	std::string editorID;
+	NiFixedString editorID;
 	char type[4];
 };
 

@@ -8,7 +8,7 @@ enum class CommandType { None, CommandName, Coc, GameSetting, ActorValue, Quest,
 enum class BaseFormCategory { All, Inventory, Equippable, Placeable };
 
 struct BaseFormEntry {
-	std::string editorID;
+	NiFixedString editorID;
 	char type[4];
 };
 

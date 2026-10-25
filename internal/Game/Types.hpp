@@ -64,3 +64,55 @@ struct ListNode {
 	T* data;
 	ListNode* next;
 };
+
+
+struct NiFixedString {
+	using StrHandle = char*;
+
+	StrHandle handle;
+
+	NiFixedString() noexcept : handle(nullptr) {
+	};
+
+	NiFixedString(const char* string) noexcept {
+		ThisCall(0x438170, this, string); 
+	};
+
+	NiFixedString(const NiFixedString& string) noexcept {
+		IncRefCount(const_cast<StrHandle&>(string.handle));
+		handle = string.handle;
+	}
+
+	~NiFixedString() noexcept {
+		ThisCall(0x4381B0, this); 
+	};
+
+	NiFixedString& operator=(const char* string) noexcept {
+		ThisCall(0xA2E750, this, string);
+		return *this;
+	}
+
+	NiFixedString& operator=(const NiFixedString& string) noexcept {
+		ThisCall(0x43BA10, this, &string);
+		return *this;
+	}
+
+	operator const char* () const noexcept {
+		return handle;
+	}
+
+	operator bool() const noexcept {
+		return handle != nullptr;
+	}
+
+	const char* c_str() const noexcept {
+		return handle;
+	}
+
+	static void IncRefCount(StrHandle& string) {
+		CdeclCall(0x43BA60, &string);
+	}
+	static void DecRefCount(StrHandle& string) {
+		CdeclCall(0x4381D0, &string);
+	}
+};
