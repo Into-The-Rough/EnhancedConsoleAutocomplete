@@ -179,9 +179,9 @@ const char* CommandTypeToRecordType(CommandType type) {
 }
 
 namespace FormCache {
-	static std::unordered_map<std::string, std::vector<std::string>> g_ByType;
+	static std::unordered_map<std::string, std::vector<NiFixedString>> g_ByType;
 
-	const std::vector<std::string>& Get(const char* type4) {
+	const std::vector<NiFixedString>& Get(const char* type4) {
 		Cache::Build();
 		std::string key(type4, 4);
 		auto it = g_ByType.find(key);
@@ -192,11 +192,11 @@ namespace FormCache {
 			if (memcmp(f.type, type4, 4) == 0)
 				list.push_back(f.editorID);
 		}
-		std::sort(list.begin(), list.end(), [](const std::string& a, const std::string& b) {
+		std::sort(list.begin(), list.end(), [](const NiFixedString& a, const NiFixedString& b) {
 			return _stricmp(a.c_str(), b.c_str()) < 0;
 		});
-		list.erase(std::unique(list.begin(), list.end(), [](const std::string& a, const std::string& b) {
-			return _stricmp(a.c_str(), b.c_str()) == 0;
+		list.erase(std::unique(list.begin(), list.end(), [](const NiFixedString& a, const NiFixedString& b) {
+			return a.handle == b.handle;
 		}), list.end());
 		return list;
 	}

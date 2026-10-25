@@ -1,6 +1,7 @@
 #include "Cache.hpp"
 #include "Game/Types.hpp"
 #include <windows.h>
+#include <string>
 
 namespace Cache {
 
@@ -61,7 +62,7 @@ static void ParsePlugin(const char* path) {
 					std::string edid((const char*)(data + subDataStart), sub->dataSize - 1);
 					if (!edid.empty()) {
 						CachedForm cf;
-						cf.editorID = std::move(edid);
+						cf.editorID = edid.c_str();
 						memcpy(cf.type, rec->type, 4);
 						g_Forms.push_back(std::move(cf));
 					}

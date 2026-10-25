@@ -8,7 +8,7 @@
 const char* CommandTypeToRecordType(CommandType type);
 
 namespace FormCache {
-	const std::vector<std::string>& Get(const char* type4);
+	const std::vector<NiFixedString>& Get(const char* type4);
 }
 
 namespace GameSettings {

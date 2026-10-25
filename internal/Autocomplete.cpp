@@ -60,7 +60,7 @@ namespace Autocomplete {
 	}
 
 	void FindForms(const char* type4, const char* prefix) {
-		FindInList(FormCache::Get(type4), prefix, [](const std::string& s) { return s.c_str(); });
+		FindInList(FormCache::Get(type4), prefix, [](const NiFixedString& s) { return s.c_str(); });
 	}
 
 	void FindSettings(const char* prefix) {
@@ -161,7 +161,7 @@ namespace Autocomplete {
 	void FindBaseForms(const char* prefix, BaseFormCategory category) {
 		std::vector<const char*> filtered;
 		for (const auto& entry : BaseForms::g_List) {
-			if (BaseForms::MatchesCategory(entry.type, category) && !entry.editorID.empty())
+			if (BaseForms::MatchesCategory(entry.type, category) && entry.editorID)
 				filtered.push_back(entry.editorID.c_str());
 		}
 		FindInList(filtered, prefix, [](const char* s) { return s; });
