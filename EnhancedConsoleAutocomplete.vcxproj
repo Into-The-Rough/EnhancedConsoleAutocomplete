@@ -137,4 +137,8 @@ copy /Y "$(TargetDir)$(TargetName).pdb" "D:\Modding\VNV\mods\Enhanced Console Au
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <Target Name="StageMod" BeforeTargets="PostBuildEvent" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <MakeDir Directories="$(ProjectDir)mod\NVSE\Plugins" />
+    <Copy SourceFiles="$(TargetPath);$(TargetDir)$(TargetName).pdb" DestinationFolder="$(ProjectDir)mod\NVSE\Plugins" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
